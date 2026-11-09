@@ -36,16 +36,23 @@ class GreedyBot(Bot):
         use_nature: allow spending nature tokens on mixed drafts.
         nature_value: points one nature token is worth to the bot.
         token_bonus: small bonus for placing a token instead of returning it.
+        majority_weight: weight of the estimated habitat majority bonus change
+            (0 = ignore majorities).
+        majority_ramp: scale that estimate by game progress (turn / 20), since
+            opponents' corridors still grow.
     """
 
     name = "greedy"
 
     def __init__(self, seed: int | None = None, use_nature: bool = True, nature_value: float = 1.0,
-                 token_bonus: float = 0.1, **params) -> None:
+                 token_bonus: float = 0.1, majority_weight: float = 1.0, majority_ramp: bool = True,
+                 **params) -> None:
         super().__init__(seed, **params)
         self.use_nature = bool(use_nature)
         self.nature_value = float(nature_value)
         self.token_bonus = float(token_bonus)
+        self.majority_weight = float(majority_weight)
+        self.majority_ramp = bool(majority_ramp)
 
     def candidates(self, game: Game) -> list[Candidate]:
         return evaluate_candidates(
@@ -53,6 +60,8 @@ class GreedyBot(Bot):
             use_nature=self.use_nature,
             nature_value=self.nature_value,
             token_bonus=self.token_bonus,
+            majority_weight=self.majority_weight,
+            majority_ramp=self.majority_ramp,
             rng=self.rng,
         )
 

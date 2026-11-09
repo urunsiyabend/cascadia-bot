@@ -118,9 +118,24 @@ Simülasyon için `game.determinize(rng)` gizli bilgiyi yeniden örnekleyen bağ
 | Bot | Fikir |
 |---|---|
 | `random` | rastgele yasal hamle |
-| `greedy` | anlık puan artışını maksimize eder (hayvan + koridor + doğa jetonu) |
+| `greedy` | anlık puan artışını maksimize eder (hayvan + koridor + çoğunluk bonusu tahmini + doğa jetonu) |
 | `heuristic` | greedy + en iyi adayları "geride bıraktığı fırsat değeri" ile yeniden sıralar; işe yaramayan üçlü aşırı nüfusu siler |
 | `lookahead` | en iyi `top_k` aday için `samples` determinize gelecek × `depth` tur greedy rollout (Monte Carlo) |
 
 Parametreler spec ile verilir: `heuristic:potential_weight=0.5,top_k=16`,
 `lookahead:top_k=8,samples=6,depth=2`.
+
+**Çoğunluk bonusu tahmini** (`greedy`, `heuristic`, `lookahead` için ortak): her aday hamlede,
+rakiplerin *şu anki* en büyük koridorlarına göre kendi bonusundaki değişim hesaplanır ve
+`majority_weight × (tur / 20)` ile ağırlıklandırılır (rakipler henüz büyüyeceği için oyun başında
+az, sonda tam). `majority_weight=0` bonusu tamamen yok sayar, `majority_ramp=false` ağırlığı
+baştan tam verir.
+
+Ölçümler (`majority_weight=1`, ramp açık, eski sürüm = `majority_weight=0`):
+
+| Karşılaşma | Oyun | Ortalama puan (yeni / eski) | Yeninin kazanma oranı |
+|---|---|---|---|
+| greedy, 2 oyuncu | 600 | 88.2 / 86.6 | %57.3 |
+| heuristic, 2 oyuncu | 400 | 91.4 / 90.6 | %53.8 |
+| greedy, 4 oyuncu (eski, ağırlık 1, ağırlık 2, ramp'sız) | 200 | 87.9 / 87.9 | %30.8 (beklenen %25; ramp'sız %19) |
+| greedy, solo | 400 | 88.0 / 87.8 | – |

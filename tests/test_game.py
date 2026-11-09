@@ -234,3 +234,19 @@ def test_lookahead_bot_runs():
 
 def test_tile_by_id_lookup():
     assert all(TILE_BY_ID[t.id] is t for t in HABITAT_TILES)
+
+
+def test_majority_estimator():
+    from cascadia_bot.bots.evaluation import MajorityEstimator
+
+    g = Game(GameConfig(num_players=3, seed=2))
+    est = MajorityEstimator(g, weight=1.0, ramp=False)
+    est.sizes = {h: [4, 5, 3] for h in Habitat}
+    est.base = {h: 1 for h in Habitat}  # player 0 is second -> 1 point
+    assert est.delta({Habitat.FOREST: 5}) == 1  # tie for first: 2 each
+    assert est.delta({Habitat.FOREST: 6}) == 2  # sole first: 3
+    assert est.delta({Habitat.FOREST: 4, Habitat.RIVER: 6}) == 2
+    ramped = MajorityEstimator(g, weight=1.0, ramp=True)
+    assert ramped.factor == pytest.approx(1 / 20)
+    off = MajorityEstimator(Game(GameConfig(num_players=2, seed=2, habitat_majority=False)), 1.0)
+    assert off.delta({Habitat.FOREST: 50}) == 0
