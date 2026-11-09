@@ -30,6 +30,7 @@ class Board:
         self.nature_tokens: int = 0
         self._frontier: set[Hex] = set()
         self._corridor_cache: dict[Habitat, tuple[dict[Hex, int], list[int]]] | None = None
+        self._probe: CorridorProbe | None = None
 
     # ------------------------------------------------------------------ setup
     @classmethod
@@ -46,6 +47,7 @@ class Board:
         b.nature_tokens = self.nature_tokens
         b._frontier = set(self._frontier)
         b._corridor_cache = self._corridor_cache
+        b._probe = self._probe
         return b
 
     # ------------------------------------------------------------- tiles
@@ -56,6 +58,7 @@ class Board:
             if n not in self.tiles:
                 self._frontier.add(n)
         self._corridor_cache = None
+        self._probe = None
 
     def frontier(self) -> set[Hex]:
         """Empty hexes adjacent to at least one tile (legal tile positions)."""
@@ -138,6 +141,12 @@ class Board:
     def largest_corridors(self) -> dict[Habitat, int]:
         return {h: self.largest_corridor(h) for h in Habitat}
 
+    def probe(self) -> "CorridorProbe":
+        """Fast what-if corridor queries for the current tiles (cached until a tile is placed)."""
+        if self._probe is None:
+            self._probe = CorridorProbe(self)
+        return self._probe
+
     def corridor_sizes_after(self, pos: Hex, tile: Tile, rotation: int) -> dict[Habitat, int]:
         """Largest corridor size for each habitat of ``tile`` if it were placed at ``pos``.
 
@@ -163,3 +172,92 @@ class Board:
     # ------------------------------------------------------------- misc
     def __len__(self) -> int:
         return len(self.tiles)
+
+
+class CorridorProbe:
+    """Answers "largest corridor per habitat if ``tile`` were placed at ``pos``" quickly.
+
+    For every candidate hex it records, per habitat, which neighbour directions
+    face that habitat and which corridor component they belong to. A query is
+    then a few bit operations; results are memoised per (hex, habitat, edge mask).
+    """
+
+    __slots__ = ("largest", "_sizes", "_comp", "_tiles", "_face", "_memo", "_arcs")
+
+    def __init__(self, board: Board):
+        corridors = board._corridors()
+        self.largest = {h: max(sizes, default=0) for h, (_, sizes) in corridors.items()}
+        self._sizes = {h: sizes for h, (_, sizes) in corridors.items()}
+        self._comp = {h: comp for h, (comp, _) in corridors.items()}
+        self._tiles = board.tiles
+        self._face: dict[Hex, list[list[tuple[int, int]]]] = {}
+        self._memo: dict[tuple[Hex, Habitat, int], int] = {}
+        self._arcs: dict[Hex, list[tuple[int, ...]]] = {}
+
+    def _facing(self, pos: Hex) -> list[list[tuple[int, int]]]:
+        face = self._face.get(pos)
+        if face is None:
+            face = [[] for _ in _HABITATS]
+            tiles = self._tiles
+            for d, n in enumerate(neighbors(pos)):
+                other = tiles.get(n)
+                if other is None:
+                    continue
+                h = other.edges[(d + 3) % 6]
+                face[h].append((1 << d, self._comp[h][n]))
+            self._face[pos] = face
+        return face
+
+    def new_corridor_size(self, pos: Hex, habitat: Habitat, edge_mask: int) -> int:
+        """Size of the corridor the new tile's ``habitat`` part would belong to."""
+        key = (pos, habitat, edge_mask)
+        size = self._memo.get(key)
+        if size is None:
+            comps = {c for bit, c in self._facing(pos)[habitat] if bit & edge_mask}
+            sizes = self._sizes[habitat]
+            size = 1 + sum(sizes[c] for c in comps)
+            self._memo[key] = size
+        return size
+
+    def sizes_after(self, pos: Hex, tile: Tile, rotation: int) -> dict[Habitat, int]:
+        out = {}
+        for habitat, mask in tile.edge_masks(rotation):
+            new = self.new_corridor_size(pos, habitat, mask)
+            largest = self.largest[habitat]
+            out[habitat] = new if new > largest else largest
+        return out
+
+    def arc_sizes(self, pos: Hex) -> list[tuple[int, ...]]:
+        """Per habitat: new corridor sizes for the 6 half-tile arcs and the full tile.
+
+        Index ``r`` (0-5) is the arc on edges ``r, r+1, r+2`` - the first habitat
+        of a dual tile at rotation ``r`` (its second habitat uses arc ``r+3``);
+        index 6 is a keystone tile (all six edges).
+        """
+        arcs = self._arcs.get(pos)
+        if arcs is None:
+            face = self._facing(pos)
+            arcs = []
+            for h in _HABITATS:
+                entries = face[h]
+                if not entries:
+                    arcs.append(_NO_JOIN)
+                    continue
+                sizes = self._sizes[h]
+                if len(entries) == 1:
+                    bit, c = entries[0]
+                    joined = 1 + sizes[c]
+                    arcs.append(tuple(joined if bit & m else 1 for m in _ARC_MASKS))
+                    continue
+                row = []
+                for mask in _ARC_MASKS:
+                    comps = {c for bit, c in entries if bit & mask}
+                    row.append(1 + sum(sizes[c] for c in comps))
+                arcs.append(tuple(row))
+            self._arcs[pos] = arcs
+        return arcs
+
+
+_ARC_MASKS = tuple(sum(1 << ((r + i) % 6) for i in range(3)) for r in range(6)) + (63,)
+_NO_JOIN = (1,) * 7
+_HABITATS = tuple(Habitat)

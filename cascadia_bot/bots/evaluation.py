@@ -14,11 +14,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from ..board import Board
+from ..board import Board, CorridorProbe
 from ..components import TURNS_PER_PLAYER, Habitat, Tile, Wildlife
 from ..game import Game, Placement
-from ..hexgrid import Hex
-from ..scoring import ScoringCards, majority_bonuses, wildlife_total
+from ..hexgrid import Hex, distance, neighbors
+from ..scoring import ScoringCards, majority_bonuses, sight_lines
 
 
 @dataclass
@@ -30,13 +30,46 @@ class Candidate:
 
 
 class TokenGainCache:
-    """Memoised wildlife score delta of putting ``wildlife`` on ``pos``."""
+    """Memoised wildlife score delta of putting ``wildlife`` on ``pos``.
+
+    Only the scoring cards a new token can affect are recomputed: the card of
+    the placed wildlife, foxes within distance 2 (fox cards look at neighbours,
+    fox D at the 8 hexes around a pair), salmon D (adjacent animals) and hawk D
+    (animals between hawks).
+    """
 
     def __init__(self, board: Board, cards: ScoringCards):
         self.board = board
         self.cards = cards
-        self.base = wildlife_total(board.tokens, cards)
+        self._scorers = {w: cards.scorer(w) for w in Wildlife}
+        self._base = {w: self._scorers[w](board.tokens) for w in Wildlife}
+        self.base = sum(self._base.values())
+        self._standard = cards.mode == "standard"
+        tokens = board.tokens
+        self._foxes = [p for p, w in tokens.items() if w == Wildlife.FOX]
+        self._salmon = {p for p, w in tokens.items() if w == Wildlife.SALMON}
+        self._hawk_between: set[Hex] = set()
+        if self._standard and cards.card(Wildlife.HAWK) == "D":
+            hawks = {p for p, w in tokens.items() if w == Wildlife.HAWK}
+            for _, _, between in sight_lines(hawks):
+                self._hawk_between.update(between)
         self._cache: dict[tuple[Wildlife, Hex], int] = {}
+
+    def _affected(self, wildlife: Wildlife, pos: Hex) -> list[Wildlife]:
+        kinds = [wildlife]
+        if not self._standard:
+            return kinds
+        if wildlife != Wildlife.FOX and any(distance(pos, f) <= 2 for f in self._foxes):
+            kinds.append(Wildlife.FOX)
+        if (
+            wildlife != Wildlife.SALMON
+            and self.cards.card(Wildlife.SALMON) == "D"
+            and any(n in self._salmon for n in neighbors(pos))
+        ):
+            kinds.append(Wildlife.SALMON)
+        if wildlife != Wildlife.HAWK and pos in self._hawk_between:
+            kinds.append(Wildlife.HAWK)
+        return kinds
 
     def gain(self, wildlife: Wildlife, pos: Hex) -> int:
         key = (wildlife, pos)
@@ -44,7 +77,9 @@ class TokenGainCache:
         if v is None:
             tokens = dict(self.board.tokens)
             tokens[pos] = wildlife
-            v = wildlife_total(tokens, self.cards) - self.base
+            v = 0
+            for kind in self._affected(wildlife, pos):
+                v += self._scorers[kind](tokens) - self._base[kind]
             self._cache[key] = v
         return v
 
@@ -108,11 +143,52 @@ class MajorityEstimator:
 
 def habitat_gain(board: Board, base: dict[Habitat, int], pos: Hex, tile: Tile, rotation: int,
                  majority: MajorityEstimator | None = None) -> float:
-    after = board.corridor_sizes_after(pos, tile, rotation)
+    after = board.probe().sizes_after(pos, tile, rotation)
     gain: float = sum(after[h] - base[h] for h in after)
     if majority is not None:
         gain += majority.delta(after)
     return gain
+
+
+def best_habitat_rotations(probe: CorridorProbe, pos: Hex, tile: Tile,
+                           majority: MajorityEstimator | None = None) -> tuple[float, list[int]]:
+    """Best habitat gain over the tile's rotations at ``pos`` and all rotations reaching it.
+
+    Equivalent to maximising :func:`habitat_gain` over rotations, but uses the
+    probe's precomputed arc table (a few list lookups per rotation).
+    """
+    arcs = probe.arc_sizes(pos)
+    largest = probe.largest
+    if tile.keystone:
+        h = tile.habitats[0]
+        size, top = arcs[h][6], largest[h]
+        if size <= top:
+            return 0.0, [0]
+        g = float(size - top)
+        if majority is not None:
+            g += majority.delta({h: size})
+        return g, [0]
+    h1, h2 = tile.habitats
+    a1, a2 = arcs[h1], arcs[h2]
+    top1, top2 = largest[h1], largest[h2]
+    best = -1.0
+    rots: list[int] = []
+    for r in range(6):
+        s1 = a1[r]
+        s2 = a2[(r + 3) % 6]
+        if s1 > top1 or s2 > top2:
+            n1 = s1 if s1 > top1 else top1
+            n2 = s2 if s2 > top2 else top2
+            g = float(n1 - top1 + n2 - top2)
+            if majority is not None:
+                g += majority.delta({h1: n1, h2: n2})
+        else:
+            g = 0.0
+        if g > best + 1e-9:
+            best, rots = g, [r]
+        elif g >= best - 1e-9:
+            rots.append(r)
+    return best, rots
 
 
 def evaluate_candidates(
@@ -140,7 +216,7 @@ def evaluate_candidates(
     board = game.board
     cards = game.cards
     gains = TokenGainCache(board, cards)
-    base_hab = board.largest_corridors()
+    probe = board.probe()
     majority = (
         MajorityEstimator(game, majority_weight, majority_ramp, majority_denial, denial_target)
         if majority_weight > 0
@@ -151,7 +227,9 @@ def evaluate_candidates(
     if not use_nature:
         options = [o for o in options if o[0] == o[1]]
 
-    hab_cache: dict[tuple[int, Hex], tuple[float, list[int]]] = {}
+    # Habitat gain depends only on the tile's habitats (not its wildlife), so tiles
+    # with the same habitat pair share the cache.
+    hab_cache: dict[tuple[tuple[Habitat, ...], Hex], tuple[float, list[int]]] = {}
     out: list[Candidate] = []
     for ts, ks in options:
         tile = game.display_tiles[ts]
@@ -174,19 +252,11 @@ def evaluate_candidates(
         existing_choice = rng.choice(ties)
 
         for pos in frontier:
-            key = (tile.id, pos)
-            if key not in hab_cache:
-                best_h: float | None = None
-                rots: list[int] = []
-                for rot in tile.rotations():
-                    g = habitat_gain(board, base_hab, pos, tile, rot, majority)
-                    if best_h is None or g > best_h + 1e-9:
-                        best_h, rots = g, [rot]
-                    elif abs(g - best_h) <= 1e-9:
-                        rots.append(rot)
-                assert best_h is not None
-                hab_cache[key] = (best_h, rots)
-            h_gain, rots = hab_cache[key]
+            key = (tile.habitats, pos)
+            cached = hab_cache.get(key)
+            if cached is None:
+                cached = hab_cache[key] = best_habitat_rotations(probe, pos, tile, majority)
+            h_gain, rots = cached
 
             tok_value, tok_pos = existing_value, existing_choice
             if wildlife in tile.wildlife:

@@ -103,7 +103,7 @@ def max_weight_packing(cells: Iterable[Hex], shapes: Iterable[tuple[frozenset[He
     return sum(solve(g) for g in groups.values())
 
 
-def _sight_lines(hawks: set[Hex]) -> list[tuple[Hex, Hex, list[Hex]]]:
+def sight_lines(hawks: set[Hex]) -> list[tuple[Hex, Hex, list[Hex]]]:
     """Unordered hawk pairs with a line of sight: (a, b, hexes strictly between).
 
     A line of sight runs flat side to flat side in a straight line and is blocked
@@ -321,7 +321,7 @@ def hawk_b(tokens: Tokens) -> int:
     hawks = _positions(tokens, Wildlife.HAWK)
     isolated = _isolated_hawks(hawks)
     seeing: set[Hex] = set()
-    for a, b, _ in _sight_lines(hawks):
+    for a, b, _ in sight_lines(hawks):
         seeing.add(a)
         seeing.add(b)
     return _HAWK_B(len(isolated & seeing))
@@ -329,7 +329,7 @@ def hawk_b(tokens: Tokens) -> int:
 
 def hawk_c(tokens: Tokens) -> int:
     """3 points per line of sight between two (non-adjacent) hawks."""
-    return 3 * len(_sight_lines(_positions(tokens, Wildlife.HAWK)))
+    return 3 * len(sight_lines(_positions(tokens, Wildlife.HAWK)))
 
 
 def hawk_d(tokens: Tokens) -> int:
@@ -340,7 +340,7 @@ def hawk_d(tokens: Tokens) -> int:
     """
     hawks = _positions(tokens, Wildlife.HAWK)
     shapes = []
-    for a, b, between in _sight_lines(hawks):
+    for a, b, between in sight_lines(hawks):
         kinds = {tokens[p] for p in between if p in tokens}
         shapes.append((frozenset([a, b]), _HAWK_D(len(kinds))))
     return max_weight_packing(hawks, shapes)
@@ -581,6 +581,7 @@ __all__ = [
     "wildlife_total",
     "majority_bonuses",
     "salmon_runs",
+    "sight_lines",
     "max_weight_packing",
     "CARD_FUNCTIONS",
 ]

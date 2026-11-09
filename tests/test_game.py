@@ -298,3 +298,40 @@ def test_mcts_bot_plays_legal_moves():
     assert res.game.turns_taken == [20, 20]
     solo = play_game([make_bot("mcts:time_limit=0.01,top_k=2", seed=0)], GameConfig(num_players=1, seed=0))
     assert solo.game.game_over
+
+
+def test_fast_evaluation_matches_full_recompute():
+    """TokenGainCache / CorridorProbe shortcuts must equal brute-force scoring."""
+    from cascadia_bot.bots.evaluation import (
+        MajorityEstimator,
+        TokenGainCache,
+        best_habitat_rotations,
+        habitat_gain,
+    )
+    from cascadia_bot.scoring import wildlife_total
+
+    rng = random.Random(3)
+    for i in range(6):
+        cards = ScoringCards(cards=tuple(rng.choice(CARD_LETTERS) for _ in range(5)))
+        g = Game(GameConfig(num_players=3, seed=i, cards=cards))
+        bots = [make_bot("random", seed=i + k) for k in range(3)]
+        while not g.game_over:
+            b = g.board
+            gains = TokenGainCache(b, cards)
+            base = wildlife_total(b.tokens, cards)
+            for w in Wildlife:
+                for pos in [p for p in b.tiles if p not in b.tokens][:6]:
+                    t = dict(b.tokens)
+                    t[pos] = w
+                    assert gains.gain(w, pos) == wildlife_total(t, cards) - base
+            corridors = b.largest_corridors()
+            maj = MajorityEstimator(g, 1.0, True)
+            for pos in sorted(b.frontier())[:5]:
+                for tile in rng.sample(HABITAT_TILES, 3):
+                    assert b.probe().sizes_after(pos, tile, 1) == b.corridor_sizes_after(pos, tile, 1)
+                    vals = {r: habitat_gain(b, corridors, pos, tile, r, maj) for r in tile.rotations()}
+                    best = max(vals.values())
+                    got, rots = best_habitat_rotations(b.probe(), pos, tile, maj)
+                    assert got == pytest.approx(best)
+                    assert sorted(rots) == sorted(r for r, v in vals.items() if abs(v - best) < 1e-9)
+            g.apply_placement(bots[g.current_player].choose_placement(g))

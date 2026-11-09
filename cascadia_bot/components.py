@@ -103,6 +103,18 @@ class Tile:
             out.append(tuple(h1 if d in first else h2 for d in range(6)))
         return tuple(out)
 
+    @cached_property
+    def _edge_masks(self) -> tuple[tuple[tuple[Habitat, int], ...], ...]:
+        out = []
+        for rot in range(6):
+            e = self._edges[rot]
+            out.append(tuple((h, sum(1 << d for d in range(6) if e[d] == h)) for h in self.habitats))
+        return tuple(out)
+
+    def edge_masks(self, rotation: int) -> tuple[tuple[Habitat, int], ...]:
+        """For each habitat of the tile: bitmask of the edge directions showing it."""
+        return self._edge_masks[rotation % 6]
+
     def edges(self, rotation: int) -> tuple[Habitat, ...]:
         """Habitat on each of the six edges for the given rotation.
 
