@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cascadia-bot"
+version = "0.1.0"
+description = "Headless Cascadia rules engine and bot test bench"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+cascadia-arena = "cascadia_bot.arena:main"
+
+[tool.setuptools.packages.find]
+include = ["cascadia_bot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
