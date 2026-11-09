@@ -139,3 +139,14 @@ baştan tam verir.
 | heuristic, 2 oyuncu | 400 | 91.4 / 90.6 | %53.8 |
 | greedy, 4 oyuncu (eski, ağırlık 1, ağırlık 2, ramp'sız) | 200 | 87.9 / 87.9 | %30.8 (beklenen %25; ramp'sız %19) |
 | greedy, solo | 400 | 88.0 / 87.8 | – |
+
+**Rakibin bonusunu düşürme** (`majority_denial`, varsayılan 0): rakiplerden alınan bonus puanını da
+değer olarak sayar; `denial_target=leader` yalnızca skorda öndeki rakibi, `mean` tüm rakiplerin
+ortalamasını hesaba katar. Ölçümlerde anlamlı bir kazanç görülmedi, bu yüzden kapalı:
+
+| Karşılaşma | Oyun | Kazanma oranı (denial / baz) |
+|---|---|---|
+| 2 oyuncu, denial=1 | 600 | %51.6 / %48.4 |
+| 2 oyuncu, denial=0.5 | 600 | %52.2 / %47.8 |
+| 4 oyuncu: leader=1 / leader=0.5 / mean=1 / baz | 400 | %28.0 / %23.6 / %23.5 / %24.9 |
+| 3 oyuncu: leader=1 / mean=1 / baz | 399 | %29.1 / %34.2 / %36.7 |

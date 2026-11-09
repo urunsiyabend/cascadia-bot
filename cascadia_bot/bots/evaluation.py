@@ -50,35 +50,60 @@ class TokenGainCache:
 
 
 class MajorityEstimator:
-    """Change in the mover's habitat majority bonus if their corridors grew to ``after``.
+    """Value change of the habitat majority bonuses if the mover's corridors grew to ``after``.
 
     The comparison uses the opponents' *current* largest corridors. Because those
     will still grow, the estimate can be scaled down early in the game:
     ``factor = weight * (turn / 20)`` when ``ramp`` is on (1.0 on the last turn).
+
+    ``denial`` also values bonus points taken away from opponents (overtaking or
+    tying a leader). ``denial_target`` chooses whose losses count:
+    ``"mean"`` - average change over all opponents, ``"leader"`` - only the
+    opponent currently ahead on total score (for winning, the leader matters).
     """
 
-    def __init__(self, game: Game, weight: float, ramp: bool = True):
+    def __init__(self, game: Game, weight: float, ramp: bool = True, denial: float = 0.0,
+                 denial_target: str = "leader"):
+        if denial_target not in ("mean", "leader"):
+            raise ValueError("denial_target must be 'mean' or 'leader'")
         self.me = game.current_player
         self.enabled = weight > 0 and game.habitat_majority
         progress = min(1.0, (game.turns_taken[self.me] + 1) / TURNS_PER_PLAYER)
         self.factor = weight * (progress if ramp else 1.0)
+        self.denial = denial if game.num_players > 1 else 0.0
         self.sizes: dict[Habitat, list[int]] = {}
-        self.base: dict[Habitat, int] = {}
-        if self.enabled:
-            per_player = [b.largest_corridors() for b in game.boards]
-            for h in Habitat:
-                self.sizes[h] = [c[h] for c in per_player]
-                self.base[h] = majority_bonuses(self.sizes[h])[self.me]
+        self.base: dict[Habitat, list[int]] = {}
+        self.opponents = [i for i in range(game.num_players) if i != self.me]
+        self.leader: int | None = None
+        if not self.enabled:
+            return
+        per_player = [b.largest_corridors() for b in game.boards]
+        for h in Habitat:
+            self.sizes[h] = [c[h] for c in per_player]
+            self.base[h] = majority_bonuses(self.sizes[h])
+        if self.denial and denial_target == "leader":
+            totals = [s.total for s in game.scores()]
+            self.leader = max(self.opponents, key=lambda i: totals[i])
 
     def delta(self, after: dict[Habitat, int]) -> float:
         if not self.enabled:
             return 0.0
-        total = 0
+        own = 0
+        opp = 0.0
         for h, size in after.items():
+            if size == self.sizes[h][self.me]:
+                continue
             sizes = list(self.sizes[h])
             sizes[self.me] = size
-            total += majority_bonuses(sizes)[self.me] - self.base[h]
-        return self.factor * total
+            new = majority_bonuses(sizes)
+            base = self.base[h]
+            own += new[self.me] - base[self.me]
+            if self.denial:
+                if self.leader is not None:
+                    opp += new[self.leader] - base[self.leader]
+                else:
+                    opp += sum(new[i] - base[i] for i in self.opponents) / len(self.opponents)
+        return self.factor * (own - self.denial * opp)
 
 
 def habitat_gain(board: Board, base: dict[Habitat, int], pos: Hex, tile: Tile, rotation: int,
@@ -98,6 +123,8 @@ def evaluate_candidates(
     token_bonus: float = 0.0,
     majority_weight: float = 0.0,
     majority_ramp: bool = True,
+    majority_denial: float = 0.0,
+    denial_target: str = "leader",
     rng: random.Random | None = None,
 ) -> list[Candidate]:
     """One best placement per (draft option, tile position), scored by immediate gain.
@@ -106,14 +133,19 @@ def evaluate_candidates(
     for mixed drafts). ``token_bonus`` is added whenever a token is placed rather
     than returned (encourages building patterns that only pay off later).
     ``majority_weight`` > 0 adds the estimated change in the habitat majority
-    bonus (see :class:`MajorityEstimator`).
+    bonus (see :class:`MajorityEstimator`); ``majority_denial`` also values bonus
+    points taken from opponents.
     """
     rng = rng or random.Random()
     board = game.board
     cards = game.cards
     gains = TokenGainCache(board, cards)
     base_hab = board.largest_corridors()
-    majority = MajorityEstimator(game, majority_weight, majority_ramp) if majority_weight > 0 else None
+    majority = (
+        MajorityEstimator(game, majority_weight, majority_ramp, majority_denial, denial_target)
+        if majority_weight > 0
+        else None
+    )
     frontier = sorted(board.frontier())
     options = game.draft_options()
     if not use_nature:

@@ -40,19 +40,23 @@ class GreedyBot(Bot):
             (0 = ignore majorities).
         majority_ramp: scale that estimate by game progress (turn / 20), since
             opponents' corridors still grow.
+        majority_denial: weight of bonus points taken away from opponents.
+        denial_target: "leader" (opponent ahead on score) or "mean" (all opponents).
     """
 
     name = "greedy"
 
     def __init__(self, seed: int | None = None, use_nature: bool = True, nature_value: float = 1.0,
                  token_bonus: float = 0.1, majority_weight: float = 1.0, majority_ramp: bool = True,
-                 **params) -> None:
+                 majority_denial: float = 0.0, denial_target: str = "leader", **params) -> None:
         super().__init__(seed, **params)
         self.use_nature = bool(use_nature)
         self.nature_value = float(nature_value)
         self.token_bonus = float(token_bonus)
         self.majority_weight = float(majority_weight)
         self.majority_ramp = bool(majority_ramp)
+        self.majority_denial = float(majority_denial)
+        self.denial_target = str(denial_target)
 
     def candidates(self, game: Game) -> list[Candidate]:
         return evaluate_candidates(
@@ -62,6 +66,8 @@ class GreedyBot(Bot):
             token_bonus=self.token_bonus,
             majority_weight=self.majority_weight,
             majority_ramp=self.majority_ramp,
+            majority_denial=self.majority_denial,
+            denial_target=self.denial_target,
             rng=self.rng,
         )
 

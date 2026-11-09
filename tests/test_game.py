@@ -242,7 +242,7 @@ def test_majority_estimator():
     g = Game(GameConfig(num_players=3, seed=2))
     est = MajorityEstimator(g, weight=1.0, ramp=False)
     est.sizes = {h: [4, 5, 3] for h in Habitat}
-    est.base = {h: 1 for h in Habitat}  # player 0 is second -> 1 point
+    est.base = {h: [1, 3, 0] for h in Habitat}  # player 0 is second -> 1 point
     assert est.delta({Habitat.FOREST: 5}) == 1  # tie for first: 2 each
     assert est.delta({Habitat.FOREST: 6}) == 2  # sole first: 3
     assert est.delta({Habitat.FOREST: 4, Habitat.RIVER: 6}) == 2
@@ -250,3 +250,18 @@ def test_majority_estimator():
     assert ramped.factor == pytest.approx(1 / 20)
     off = MajorityEstimator(Game(GameConfig(num_players=2, seed=2, habitat_majority=False)), 1.0)
     assert off.delta({Habitat.FOREST: 50}) == 0
+
+
+def test_majority_denial():
+    from cascadia_bot.bots.evaluation import MajorityEstimator
+
+    g = Game(GameConfig(num_players=3, seed=2))
+    est = MajorityEstimator(g, weight=1.0, ramp=False, denial=1.0, denial_target="mean")
+    est.sizes = {h: [4, 5, 3] for h in Habitat}
+    est.base = {h: [1, 3, 0] for h in Habitat}
+    # overtaking: me 1 -> 3 (+2), player 1: 3 -> 1 (-2), player 2 unchanged -> mean -1
+    assert est.delta({Habitat.FOREST: 6}) == 2 + 1
+    est.leader = 1  # only the leader's loss counts
+    assert est.delta({Habitat.FOREST: 6}) == 2 + 2
+    # tying the leader: me +1, leader 3 -> 2
+    assert est.delta({Habitat.FOREST: 5}) == 1 + 1
