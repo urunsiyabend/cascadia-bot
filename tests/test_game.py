@@ -335,3 +335,17 @@ def test_fast_evaluation_matches_full_recompute():
                     assert got == pytest.approx(best)
                     assert sorted(rots) == sorted(r for r, v in vals.items() if abs(v - best) < 1e-9)
             g.apply_placement(bots[g.current_player].choose_placement(g))
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "mce:playouts=6,top_k=3",
+        "mce:playouts=6,top_k=3,allocation=ucb",
+        "mce:time_limit=0.01,top_k=2,allocation=uniform,opponents=random,reward=own",
+        "mce:playouts=4,top_k=2,horizon=1",
+    ],
+)
+def test_mce_bot_variants(spec):
+    res = play_game([make_bot(spec, seed=0), make_bot("greedy", seed=1)], GameConfig(num_players=2, seed=0))
+    assert res.game.turns_taken == [20, 20]

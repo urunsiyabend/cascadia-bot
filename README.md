@@ -122,6 +122,7 @@ Simülasyon için `game.determinize(rng)` gizli bilgiyi yeniden örnekleyen bağ
 | `heuristic` | greedy + en iyi adayları "geride bıraktığı fırsat değeri" ile yeniden sıralar (olasılık ağırlıklı, aşağıya bakın); işe yaramayan üçlü aşırı nüfusu siler |
 | `lookahead` | en iyi `top_k` aday için `samples` determinize gelecek × `depth` tur greedy rollout (Monte Carlo) |
 | `mcts` | determinizasyonlu, sıra-soyutlamalı açık döngü MCTS (aşağıya bakın) |
+| `mce` | düz Monte Carlo: her aday için oyun sonuna kadar greedy simülasyonlar, ödül puan farkı (Kingdomino makalesinden) |
 
 Parametreler spec ile verilir: `heuristic:potential_weight=0.5,top_k=16`,
 `lookahead:top_k=8,samples=6,depth=2`, `mcts:iterations=300,depth=3` veya `mcts:time_limit=1.0`.
@@ -181,3 +182,14 @@ ortalamasını hesaba katar. Ölçümlerde anlamlı bir kazanç görülmedi, bu 
 | 2 oyuncu, denial=0.5 | 600 | %52.2 / %47.8 |
 | 4 oyuncu: leader=1 / leader=0.5 / mean=1 / baz | 400 | %28.0 / %23.6 / %23.5 / %24.9 |
 | 3 oyuncu: leader=1 / mean=1 / baz | 399 | %29.1 / %34.2 / %36.7 |
+
+**MCE** (`cascadia_bot/bots/mce.py`): Gedda vd. (2018) Kingdomino çalışmasında düz Monte Carlo,
+greedy simülasyonlar ve puan farkı ödülüyle UCT'yi geçmişti. Her aday hamle için gizli bilgi yeniden
+örneklenir, hamle oynanır ve tüm oyuncular oyun sonuna kadar greedy oynar. Parametreler:
+`playouts` (veya `time_limit`), `top_k`, `allocation` (`halving` = ardışık yarılama, `ucb`,
+`uniform`), `horizon` (0 = oyun sonu), `reward` (`relative` / `own`), `opponents`
+(`greedy` / `random`).
+
+**Parametre taraması**: `python -m cascadia_bot.sweep --baseline heuristic --games 200 --workers 4
+spec1 spec2 ...` her spec'i aynı tohumlarla taban bota karşı oynatır; kazanma oranı ve oyun başına
+puan farkı ± standart hata verir.
