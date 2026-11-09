@@ -149,6 +149,13 @@ ile değerlendirilir; ödül kendi değerimiz eksi en iyi rakibin değeri. Param
 (veya `time_limit` saniye), `top_k`, `depth`, `c` (UCB keşif sabiti, puan cinsinden),
 `widen_c`, `widen_alpha`, `potential_weight`. Son hamlenin istatistikleri `bot.last_stats` içinde.
 
+İlk ölçüm (varsayılanlar: 150 iterasyon, `top_k=8`, `depth=2`), rakip `heuristic`:
+
+| Karşılaşma | Oyun | Ortalama puan (mcts / heuristic) | MCTS kazanma | Süre (s/oyun) |
+|---|---|---|---|---|
+| 2 oyuncu | 120 | 92.0 / 91.2 | %57.9 | 25.8 / 0.15 |
+| solo | 60 | 93.4 / 92.9 | – | 11.8 / 0.18 |
+
 **Çoğunluk bonusu tahmini** (`greedy`, `heuristic`, `lookahead` için ortak): her aday hamlede,
 rakiplerin *şu anki* en büyük koridorlarına göre kendi bonusundaki değişim hesaplanır ve
 `majority_weight × (tur / 20)` ile ağırlıklandırılır (rakipler henüz büyüyeceği için oyun başında
