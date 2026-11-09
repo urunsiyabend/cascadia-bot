@@ -265,3 +265,36 @@ def test_majority_denial():
     assert est.delta({Habitat.FOREST: 6}) == 2 + 2
     # tying the leader: me +1, leader 3 -> 2
     assert est.delta({Habitat.FOREST: 5}) == 1 + 1
+
+
+def test_bag_counts_match_hidden_bag():
+    from cascadia_bot.bots.probability import bag_counts
+
+    bots = [make_bot("greedy", seed=0), make_bot("greedy", seed=1)]
+    g = Game(GameConfig(num_players=2, seed=8))
+    for _ in range(15):
+        assert bag_counts(g) == {w: g.bag.count(w) for w in Wildlife}
+        g.apply_placement(bots[g.current_player].choose_placement(g))
+
+
+def test_availability_and_expected_best():
+    from cascadia_bot.bots.probability import expected_best, next_turn_availability
+
+    g = Game(GameConfig(num_players=2, seed=8))
+    avail = next_turn_availability(g)
+    assert all(0.0 < p < 1.0 for p in avail.values())
+    gains = {w: 0 for w in Wildlife}
+    gains[Wildlife.BEAR] = 6
+    gains[Wildlife.ELK] = 4
+    a = {w: 0.0 for w in Wildlife}
+    a[Wildlife.BEAR] = 0.5
+    a[Wildlife.ELK] = 1.0
+    assert expected_best(gains, a) == pytest.approx(0.5 * 6 + 0.5 * 4)
+
+
+def test_mcts_bot_plays_legal_moves():
+    bots = [make_bot("mcts:iterations=12,top_k=3", seed=0), make_bot("heuristic", seed=1)]
+    res = play_game(bots, GameConfig(num_players=2, seed=0))
+    assert res.game.turns_taken == [20, 20]
+    solo = play_game([make_bot("mcts:time_limit=0.01,top_k=2", seed=0)], GameConfig(num_players=1, seed=0))
+    assert solo.game.game_over

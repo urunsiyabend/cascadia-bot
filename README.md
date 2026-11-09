@@ -119,11 +119,35 @@ Simülasyon için `game.determinize(rng)` gizli bilgiyi yeniden örnekleyen bağ
 |---|---|
 | `random` | rastgele yasal hamle |
 | `greedy` | anlık puan artışını maksimize eder (hayvan + koridor + çoğunluk bonusu tahmini + doğa jetonu) |
-| `heuristic` | greedy + en iyi adayları "geride bıraktığı fırsat değeri" ile yeniden sıralar; işe yaramayan üçlü aşırı nüfusu siler |
+| `heuristic` | greedy + en iyi adayları "geride bıraktığı fırsat değeri" ile yeniden sıralar (olasılık ağırlıklı, aşağıya bakın); işe yaramayan üçlü aşırı nüfusu siler |
 | `lookahead` | en iyi `top_k` aday için `samples` determinize gelecek × `depth` tur greedy rollout (Monte Carlo) |
+| `mcts` | determinizasyonlu, sıra-soyutlamalı açık döngü MCTS (aşağıya bakın) |
 
 Parametreler spec ile verilir: `heuristic:potential_weight=0.5,top_k=16`,
-`lookahead:top_k=8,samples=6,depth=2`.
+`lookahead:top_k=8,samples=6,depth=2`, `mcts:iterations=300,depth=3` veya `mcts:time_limit=1.0`.
+
+**Olasılık hesabı** (`cascadia_bot/bots/probability.py`): torbanın içeriği açık bilgiden kesin
+hesaplanır (her türden 20 − tahtalarda/ortada/kenarda görünenler). Buradan, oyuncunun bir sonraki
+turunda her hayvanın ortada bulunma olasılığı tahmin edilir (kalan 3 jeton + sıradaki çekilişler
+havuzu, Poisson yaklaşımı). `heuristic` botunun fırsat değeri `potential_mode` ile seçilir:
+
+| `potential_mode` | Fırsat değeri |
+|---|---|
+| `flat` | her hayvan için "bir jeton daha gelirse en iyi kazanç" toplamı (olasılıksız) |
+| `prob` | aynı toplam, her terim o hayvanın gelme olasılığıyla çarpılır |
+| `expmax` (varsayılan) | sıradaki turda gelecek hayvanlar arasından alınabilecek **en iyi** kazancın beklenen değeri (tek jeton alınabildiği için) |
+
+Son turda fırsat değeri 0'dır. Ölçüm (`potential_weight=1`): solo 400 oyunda `expmax` 93.2 / `flat`
+92.3 puan; 2 oyunculu kafa kafaya 400 oyunda `expmax` %56 kazandı.
+
+**MCTS** (`cascadia_bot/bots/mcts.py`): her iterasyon gizli bilgiyi yeniden örnekler
+(`game.determinize`). Kökte gerçek en iyi `top_k` aday, daha derinde ise "greedy sıralamasındaki
+k'inci hamle" kenar olarak kullanılır (determinizasyonlar arasında somut hamleler değiştiği için).
+Aşamalı genişletme ile ziyaret arttıkça daha fazla aday açılır; rakipler simülasyonda greedy oynar.
+`depth` kendi turumuz kadar ilerledikten sonra pozisyon `puan + potential_weight × fırsat değeri`
+ile değerlendirilir; ödül kendi değerimiz eksi en iyi rakibin değeri. Parametreler: `iterations`
+(veya `time_limit` saniye), `top_k`, `depth`, `c` (UCB keşif sabiti, puan cinsinden),
+`widen_c`, `widen_alpha`, `potential_weight`. Son hamlenin istatistikleri `bot.last_stats` içinde.
 
 **Çoğunluk bonusu tahmini** (`greedy`, `heuristic`, `lookahead` için ortak): her aday hamlede,
 rakiplerin *şu anki* en büyük koridorlarına göre kendi bonusundaki değişim hesaplanır ve

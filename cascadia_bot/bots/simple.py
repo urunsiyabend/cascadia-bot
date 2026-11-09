@@ -6,6 +6,7 @@ from ..components import Wildlife
 from ..game import Game, Placement, PreAction, WipeOverpopulation
 from .base import Bot
 from .evaluation import Candidate, TokenGainCache, best_candidate, evaluate_candidates
+from .probability import best_token_gains, expected_best, next_turn_availability, turns_left
 
 
 class RandomBot(Bot):
@@ -78,19 +79,31 @@ class GreedyBot(Bot):
 class HeuristicBot(GreedyBot):
     """Greedy, but re-ranks the top candidates by the *option value* they leave behind.
 
-    potential(board) = sum over wildlife of the best score gain one more token of
-    that wildlife could make on an open spot. The final value is
-    ``immediate + potential_weight * potential``. It also wipes an optional
-    overpopulation when none of the three identical tokens is useful.
+    The potential is the value of the *next* turn's token after the move:
+
+    * ``potential_mode=flat``: sum over wildlife of the best gain one more token
+      of that wildlife could make on an open spot (every wildlife counted alike).
+    * ``potential_mode=prob``: the same sum, each term weighted by the
+      probability that this wildlife is in the display at our next turn
+      (computed from the public bag composition).
+    * ``potential_mode=expmax``: expected best gain over the wildlife that turn
+      out to be available next turn (we can only take one token).
+
+    The final value is ``immediate + potential_weight * potential``; potential is
+    0 on the player's last turn. It also wipes an optional overpopulation when
+    none of the three identical tokens is useful.
     """
 
     name = "heuristic"
 
-    def __init__(self, seed: int | None = None, potential_weight: float = 0.3, top_k: int = 12,
-                 **params) -> None:
+    def __init__(self, seed: int | None = None, potential_weight: float = 1.0, top_k: int = 12,
+                 potential_mode: str = "expmax", **params) -> None:
         super().__init__(seed, **params)
+        if potential_mode not in ("flat", "prob", "expmax"):
+            raise ValueError("potential_mode must be flat, prob or expmax")
         self.potential_weight = float(potential_weight)
         self.top_k = int(top_k)
+        self.potential_mode = potential_mode
 
     def _potential(self, game: Game, cand: Candidate) -> float:
         p = cand.placement
@@ -101,14 +114,13 @@ class HeuristicBot(GreedyBot):
         board.place_tile(p.tile_pos, tile, p.rotation)
         if p.token_pos is not None:
             board.tokens[p.token_pos] = wildlife
-        gains = TokenGainCache(board, game.cards)
-        total = 0.0
-        for w in Wildlife:
-            best = 0
-            for spot in board.token_spots(w):
-                best = max(best, gains.gain(w, spot))
-            total += best
-        return total
+        gains = best_token_gains(board, game.cards)
+        if self.potential_mode == "flat":
+            return float(sum(gains.values()))
+        avail = next_turn_availability(game, taken_slot=p.token_slot)
+        if self.potential_mode == "prob":
+            return sum(gains[w] * avail[w] for w in Wildlife)
+        return expected_best(gains, avail)
 
     def choose_pre_action(self, game: Game) -> PreAction | None:
         kind = game.overpopulated_three()
@@ -123,6 +135,8 @@ class HeuristicBot(GreedyBot):
         cands = self.candidates(game)
         cands.sort(key=lambda c: c.value, reverse=True)
         top = cands[: self.top_k]
+        if turns_left(game, game.current_player) <= 1 or self.potential_weight == 0:
+            return best_candidate(top, self.rng).placement
         scored = [(c.value + self.potential_weight * self._potential(game, c), c) for c in top]
         best = max(v for v, _ in scored)
         return self.rng.choice([c for v, c in scored if v >= best - 1e-9]).placement

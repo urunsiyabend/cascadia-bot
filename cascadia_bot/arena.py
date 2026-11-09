@@ -113,12 +113,13 @@ def summarize(results: list[dict], specs: list[str], solo: bool) -> dict:
 
 def format_summary(summary: dict, solo: bool) -> str:
     wl = [w.name.lower() for w in Wildlife]
-    head = f"{'bot':<34}{'games':>6}{'mean':>8}{'sd':>6}{'min':>5}{'max':>5}"
+    width = max([len(k) for k in summary] + [3]) + 2
+    head = f"{'bot':<{width}}{'games':>6}{'mean':>8}{'sd':>6}{'min':>5}{'max':>5}"
     head += "" if solo else f"{'win%':>7}"
     head += "".join(f"{w[:4]:>6}" for w in wl) + f"{'hab':>6}{'nat':>5}{'s/game':>8}"
     lines = [head, "-" * len(head)]
     for spec, s in sorted(summary.items(), key=lambda kv: -kv[1]["mean"]):
-        line = f"{spec[:33]:<34}{s['games']:>6}{s['mean']:>8.1f}{s['stdev']:>6.1f}{s['min']:>5}{s['max']:>5}"
+        line = f"{spec:<{width}}{s['games']:>6}{s['mean']:>8.1f}{s['stdev']:>6.1f}{s['min']:>5}{s['max']:>5}"
         line += "" if solo else f"{100 * s['win_rate']:>6.1f}%"
         line += "".join(f"{s['wildlife'].get(w, 0):>6.1f}" for w in wl)
         line += f"{s['habitat']:>6.1f}{s['nature']:>5.1f}{s['sec_per_game']:>8.2f}"

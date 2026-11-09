@@ -11,6 +11,7 @@ from typing import Callable
 
 from .base import Bot
 from .lookahead import LookaheadBot
+from .mcts import MCTSBot
 from .simple import GreedyBot, HeuristicBot, RandomBot
 
 BOT_REGISTRY: dict[str, Callable[..., Bot]] = {}
@@ -20,7 +21,7 @@ def register(name: str, factory: Callable[..., Bot]) -> None:
     BOT_REGISTRY[name] = factory
 
 
-for _cls in (RandomBot, GreedyBot, HeuristicBot, LookaheadBot):
+for _cls in (RandomBot, GreedyBot, HeuristicBot, LookaheadBot, MCTSBot):
     register(_cls.name, _cls)
 
 
@@ -50,4 +51,14 @@ def make_bot(spec: str, seed: int | None = None) -> Bot:
     return bot
 
 
-__all__ = ["Bot", "RandomBot", "GreedyBot", "HeuristicBot", "LookaheadBot", "make_bot", "register", "BOT_REGISTRY"]
+__all__ = [
+    "Bot",
+    "RandomBot",
+    "GreedyBot",
+    "HeuristicBot",
+    "LookaheadBot",
+    "MCTSBot",
+    "make_bot",
+    "register",
+    "BOT_REGISTRY",
+]
