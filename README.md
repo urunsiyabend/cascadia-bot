@@ -243,6 +243,19 @@ onun kadar iyi, daha yüksek puanlı ve daha hızlı. (3–4 oyuncu için bu kar
 (aday başına simülasyon azalınca iyi adaylar gürültüyle eleniyor). Aday sayısı bütçeyle birlikte
 artırılmalı.
 
+## Hipotez testleri
+
+| # | Hipotez | Deney | Sonuç |
+|---|---|---|---|
+| H1 | Başlayan oyuncu avantajlı mı? | `value` kendine karşı, 3000 oyun | **Hayır.** Başlayan %48.2 kazanıyor (± 0.9), puan farkı −0.26 ± 0.14: sınırda, küçük bir ikinci oyuncu avantajı (son hamle?) |
+| H2 | Başlangıç karosu puanı etkiliyor mu? | 5 başlangıç karosu, 2000 solo `value` oyunu | **Hayır.** Ortalamalar 94.7–95.3; ANOVA F(4,1995) = 0.92 (p > 0.05) |
+| H3 | Doğa jetonu 1 puandan değerli mi? | greedy'nin jetona biçtiği değer, greedy'ye karşı 400'er oyun | **Evet.** Değer 0.5: −1.04; 2: +1.20; 3: +1.63; **4: +1.71 ± 0.42**; 6: +0.59. `value` botunda daha küçük (3: +0.73 ± 0.39) çünkü öğrenilmiş model jetonları kısmen hesaba katıyor |
+| H4 | Yeniden planlama kuralı eşiğe duyarlı mı? | `plan` sürümleri, greedy'ye karşı 400'er oyun | Eşik gevşetmek etkisiz (+0.47 ± 0.42). Belirleyici olan sıklık: her tur yeniden seçen `plan:replan=always,check_every=1` **+3.50 ± 0.40, %70.4** |
+
+4 oyuncuda 2 planlı (`ev`) + 2 greedy (80 benzersiz oyun): planlı takım +0.44 ± 0.70 puan, kazanma payı
+%51.2 → anlamlı fark yok. (Aynı davranan iki bot rotasyonda karşılıklı oturunca oyunlar tekrarlanır;
+ölçümde tekrarlar ayıklandı ve sonraki 4 oyunculu deneylerde koltuk sırası buna göre seçildi.)
+
 ## Algoritmalar ve deneyler
 
 Tüm karşılaştırmalar `python -m cascadia_bot.sweep` ile yapıldı: aday bot, aynı tohumlarla (aynı kartlar,
