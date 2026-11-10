@@ -251,6 +251,8 @@ artırılmalı.
 | H2 | Başlangıç karosu puanı etkiliyor mu? | 5 başlangıç karosu, 2000 solo `value` oyunu | **Hayır.** Ortalamalar 94.7–95.3; ANOVA F(4,1995) = 0.92 (p > 0.05) |
 | H3 | Doğa jetonu 1 puandan değerli mi? | greedy'nin jetona biçtiği değer, greedy'ye karşı 400'er oyun | **Evet.** Değer 0.5: −1.04; 2: +1.20; 3: +1.63; **4: +1.71 ± 0.42**; 6: +0.59. `value` botunda daha küçük (3: +0.73 ± 0.39) çünkü öğrenilmiş model jetonları kısmen hesaba katıyor |
 | H4 | Yeniden planlama kuralı eşiğe duyarlı mı? | `plan` sürümleri, greedy'ye karşı 400'er oyun | Eşik gevşetmek etkisiz (+0.47 ± 0.42). Belirleyici olan sıklık: her tur yeniden seçen `plan:replan=always,check_every=1` **+3.50 ± 0.40, %70.4** |
+| H5 | 4 oyuncuda kendi puanı mı, puan farkı mı? | 2 `mce:reward=own` + 2 `mce`, 80 benzersiz oyun | **Kendi puanı.** Takım farkı +1.81 ± 0.40 (z = 4.5), kazanma payı %66.2 |
+| H6 | Esnek plan 4 oyuncuda da kazandırır mı? | 2 `plan:replan=always` + 2 greedy, 160 benzersiz oyun | **Evet.** Takım farkı +1.39 ± 0.43 (z = 3.2), kazanma payı %54.4 (2 oyuncuda +1.30 ± 0.41) |
 
 4 oyuncuda 2 planlı (`ev`) + 2 greedy (80 benzersiz oyun): planlı takım +0.44 ± 0.70 puan, kazanma payı
 %51.2 → anlamlı fark yok. (Aynı davranan iki bot rotasyonda karşılıklı oturunca oyunlar tekrarlanır;
