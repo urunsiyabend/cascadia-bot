@@ -349,3 +349,18 @@ def test_fast_evaluation_matches_full_recompute():
 def test_mce_bot_variants(spec):
     res = play_game([make_bot(spec, seed=0), make_bot("greedy", seed=1)], GameConfig(num_players=2, seed=0))
     assert res.game.turns_taken == [20, 20]
+
+
+def test_train_value_and_learned_bots(tmp_path):
+    from cascadia_bot.bots.features import LinearValue, game_features
+    from cascadia_bot.train_value import main as train_main
+
+    out = tmp_path / "v.json"
+    assert train_main(["--games", "12", "--out", str(out), "--holdout", "0.25"]) == 0
+    model = LinearValue.load(out)
+    assert "bias" in model.weights and model.meta["players"] == 2
+    g = Game(GameConfig(num_players=2, seed=1))
+    assert isinstance(model.predict(game_features(g, 0)), float)
+    bots = [make_bot(f"value:model={out}", seed=0), make_bot(f"mce:horizon=1,playouts=4,top_k=2,evaluator=learned,model={out}", seed=1)]
+    res = play_game(bots, GameConfig(num_players=2, seed=2))
+    assert res.game.turns_taken == [20, 20]

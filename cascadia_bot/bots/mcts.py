@@ -30,6 +30,7 @@ import time
 from ..components import Wildlife
 from ..game import Game, Placement, PreAction
 from .evaluation import Candidate, evaluate_candidates
+from .features import LinearValue, default_model, game_features
 from .probability import best_token_gains, expected_best, next_turn_availability, turns_left
 from .simple import GreedyBot, HeuristicBot
 
@@ -55,8 +56,14 @@ class MCTSBot(GreedyBot):
 
     def __init__(self, seed: int | None = None, iterations: int = 150, time_limit: float = 0.0,
                  top_k: int = 8, depth: int = 2, c: float = 4.0, widen_c: float = 2.0,
-                 widen_alpha: float = 0.5, potential_weight: float = 1.0, **params) -> None:
+                 widen_alpha: float = 0.5, potential_weight: float = 1.0, evaluator: str = "potential",
+                 model: str = "", **params) -> None:
         super().__init__(seed, **params)
+        if evaluator not in ("potential", "learned"):
+            raise ValueError("evaluator must be potential or learned")
+        self.evaluator = evaluator
+        self._model_path = model
+        self._models: dict[int, LinearValue] = {}
         self.iterations = int(iterations)
         self.time_limit = float(time_limit)
         self.top_k = int(top_k)
@@ -101,9 +108,24 @@ class MCTSBot(GreedyBot):
                 best_i, best_u = i, u
         return best_i
 
-    def _value(self, sim: Game, player: int) -> float:
-        score = sim.scores()[player].total
-        if self.potential_weight == 0 or turns_left(sim, player) <= 0:
+    def _model(self, num_players: int) -> LinearValue:
+        model = self._models.get(num_players)
+        if model is None:
+            model = LinearValue.load(self._model_path) if self._model_path else default_model(num_players)
+            if model is not None:
+                self._models[num_players] = model
+        if model is None:
+            raise RuntimeError(f"no trained value model for {num_players} players (run cascadia_bot.train_value)")
+        return model
+
+    def _value(self, sim: Game, player: int, score: int | None = None) -> float:
+        if score is None:
+            score = sim.scores()[player].total
+        if sim.game_over or turns_left(sim, player) <= 0:
+            return float(score)
+        if self.evaluator == "learned":
+            return score + self.potential_weight * self._model(sim.num_players).predict(game_features(sim, player))
+        if self.potential_weight == 0:
             return float(score)
         gains = best_token_gains(sim.boards[player], sim.cards)
         if sim.current_player == player and not sim.game_over:
@@ -113,7 +135,8 @@ class MCTSBot(GreedyBot):
         return score + self.potential_weight * expected_best(gains, avail)
 
     def _reward(self, sim: Game, me: int) -> float:
-        values = [self._value(sim, p) for p in range(sim.num_players)]
+        totals = [s.total for s in sim.scores()]
+        values = [self._value(sim, p, totals[p]) for p in range(sim.num_players)]
         if sim.num_players == 1:
             return values[0]
         return values[me] - max(v for i, v in enumerate(values) if i != me)
