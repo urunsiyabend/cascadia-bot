@@ -202,6 +202,21 @@ tur sonra ödeme yapar: tek adımlık değerlendirme bunları göremez, gerçek 
 ileri bakan MCE görür. Avantajın büyük kısmı kendi ortamını daha iyi kurmaktan geliyor (solo +6.2), rakibi
 engellemekten değil.
 
+**Şahin avantajı karta bağlı.** Şahin kartı sabitlenerek (diğer kartlar rastgele, solo, kart başına 60
+tohum) MCE − heuristic:
+
+| Şahin kartı | Şahin puanı (mce / heuristic) | Şahin jetonu | Toplam fark |
+|---|---|---|---|
+| A (komşusuz şahinler) | 16.7 / 16.8 (−0.1 ± 0.7) | 5.6 / 5.6 | +5.3 ± 0.6 |
+| B (komşusuz + görüş hattı) | 13.7 / 13.2 (+0.5 ± 1.1) | 4.2 / 4.1 | +5.5 ± 0.7 |
+| C (görüş hattı başına 3) | **22.4 / 13.5 (+8.9 ± 1.5)** | 5.3 / 3.7 | +7.6 ± 0.9 |
+| D (çift arasındaki türler) | 11.0 / 9.1 (+1.9 ± 0.9) | 3.1 / 2.6 | +5.8 ± 0.7 |
+
+Şahin farkının neredeyse tamamı C kartından geliyor: orada her yeni şahin birden fazla görüş hattı açtığı
+için değer birikerek artıyor ve MCE daha çok şahin koyuyor. A/B'de şahin farkı yok. Buna karşın MCE her şahin
+kartında +5–8 puan önde; ortak kazanç habitat (+3.3 ± 0.25). MCE kart bazında yer değiştiriyor: geyik C/D'de
+(−3.5 / −2.4) ve tilki C'de (−1.9) puandan vazgeçip habitat, şahin C/D, somon A ve ayı A'ya yatırıyor.
+
 **MCE'ye karşı MCE (200 oyun), kazananı ne belirliyor?** Kazanan − kaybeden: toplam +5.8; hayvanlar
 +4.1 (şahin +2.8 ± 0.9, somon +1.6 ± 0.6; ayı, geyik, tilki ≈ 0), habitat +0.6, çoğunluk bonusu +0.9.
 Eşit güçteki botlar arasında oyunu en riskli/değişken desenler (şahin, somon koşuları) ve çoğunluk
