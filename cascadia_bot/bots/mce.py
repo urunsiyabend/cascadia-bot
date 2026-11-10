@@ -6,9 +6,13 @@ reward beat UCT on a similar stochastic tile-drafting game.
 
 For each of the ``top_k`` greedy candidates the bot runs playouts: resample the
 hidden information, play the candidate, then let every player follow a greedy
-policy until the end of the game (or for ``horizon`` more of our own turns,
-then evaluate like :class:`MCTSBot`). The candidate with the best mean reward
-is played.
+policy for ``horizon`` more of our own turns (0 = to the end of the game) and
+evaluate like :class:`MCTSBot` (score + estimated future value). The candidate
+with the best mean reward is played.
+
+Defaults (horizon 5, 96 playouts, 12 candidates, successive halving) come from
+sweeps against ``heuristic``: 81% wins, +5.5 points per game. Full-game
+playouts were much worse (-0.7 to -4.6 points) because of playout noise.
 
 Budget allocation over candidates (``allocation``):
 
@@ -48,8 +52,8 @@ from .simple import RandomBot
 class MCEBot(MCTSBot):
     name = "mce"
 
-    def __init__(self, seed: int | None = None, playouts: int = 48, time_limit: float = 0.0,
-                 top_k: int = 8, allocation: str = "halving", c: float = 4.0, horizon: int = 0,
+    def __init__(self, seed: int | None = None, playouts: int = 96, time_limit: float = 0.0,
+                 top_k: int = 12, allocation: str = "halving", c: float = 4.0, horizon: int = 5,
                  reward: str = "relative", opponents: str = "greedy", potential_weight: float = 1.0,
                  crn: bool = True, **params) -> None:
         super().__init__(seed, iterations=playouts, time_limit=time_limit, top_k=top_k, depth=horizon,
