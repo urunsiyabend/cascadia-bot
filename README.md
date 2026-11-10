@@ -135,13 +135,17 @@ Simülasyon için `game.determinize(rng)` gizli bilgiyi yeniden örnekleyen bağ
 | `value` | greedy'nin en iyi 12 adayı için hamle sonrası durumun gerçek puanı + öğrenilmiş gelecek değeri | 0.14 |
 | `lookahead` | basit Monte Carlo ileri bakış (eski, yerini `mce` aldı) | ~2–3 |
 | `mcts` | determinizasyonlu, sıra-soyutlamalı açık döngü MCTS | ~10–15 |
-| `mce` | **en güçlü**: düz Monte Carlo, 3 turluk simülasyon + öğrenilmiş değer, ardışık yarılama | ~10 |
+| `mce` | **en güçlü**: düz Monte Carlo, 3 turluk simülasyon + öğrenilmiş değer, ardışık yarılama, kendi puanını maksimize eder | ~8–10 |
 
 Parametreler spec ile verilir, ör. `mce:horizon=5,playouts=96`, `mcts:depth=3`,
 `heuristic:potential_mode=flat`, `greedy:majority_weight=0`. Gizli bilgiyle hile yapılmaz: simülasyon
 yapan botlar `game.determinize(rng)` ile destenin sırasını ve torbayı yeniden örnekler.
 
-## Sonuçlar (varsayılan ayarlar, rastgele A–D kartları)
+## Sonuçlar (rastgele A–D kartları)
+
+> Bu bölümdeki `mce` ölçümleri, ödül varsayılanı `relative` (puan farkı) iken yapıldı. Varsayılan sonradan
+> `own` (kendi puanı) oldu; o sürüm 2 oyuncuda `heuristic`e karşı +6.71 ± 0.57 (%83.4), 4 oyuncuda 2'ye 2
+> eski varsayılana karşı +1.81 ± 0.40 (bkz. H5 ve MCE ligi).
 
 **2 oyuncu**, aynı tohumlarla `heuristic`e karşı (oyun başına puan farkı ± standart hata):
 
@@ -257,6 +261,26 @@ artırılmalı.
 4 oyuncuda 2 planlı (`ev`) + 2 greedy (80 benzersiz oyun): planlı takım +0.44 ± 0.70 puan, kazanma payı
 %51.2 → anlamlı fark yok. (Aynı davranan iki bot rotasyonda karşılıklı oturunca oyunlar tekrarlanır;
 ölçümde tekrarlar ayıklandı ve sonraki 4 oyunculu deneylerde koltuk sırası buna göre seçildi.)
+
+## MCE ligi: sürümler birbirine karşı
+
+6 MCE sürümü, her çift kafa kafaya 60 oyun (2 oyuncu, aynı tohumlar). Güç puanı = ortalama bir sürüme karşı
+oyun başına puan farkı (ikili farklardan ağırlıklı en küçük kareler).
+
+| Sıra | Sürüm | Güç | Not |
+|---|---|---|---|
+| 1 | `mce:horizon=5,reward=own` | **+1.04** | ~2× yavaş |
+| 2 | `mce:playouts=192` | +0.46 | ~2× yavaş |
+| 3 | `mce:reward=own` (**yeni varsayılan** `mce`) | +0.37 | |
+| 4 | `mce:horizon=5` | +0.33 | |
+| 5 | `mce:reward=relative` (eski varsayılan) | −0.97 | |
+| 6 | `mce:reward=win` (kazanma olasılığı) | −1.23 | own'a −1.93 ± 0.83, %40 |
+
+Kazanma olasılığını maksimize etmek (`reward=win`, P(kazanmak) = Φ(fark / 2.1·√kalan tur), hata ölçümü
+`value` oyunlarından) işe yaramadı: büyük farkla önde/geride iken olasılık ≈1/≈0'a doyar, adaylar
+ayrışmaz ve gürültülü 96 simülasyonla bilgi kaybolur; puanı büyütmek ise rastgele çekilişlere karşı tampon
+oluşturur. İyi sürümler arasında küçük bir döngü (own > ufuk 5 > 192 sim. > own) görünüyor ama farklar
+hata payı (±0.9) içinde.
 
 ## Algoritmalar ve deneyler
 
