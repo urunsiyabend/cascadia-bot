@@ -311,6 +311,24 @@ sırası bu gürültüyü azaltmadı. Kısa ufuk + iyi değerlendirme çözüm o
 Aynı süre bütçesinde ağaçsız MCE, ağaçlı MCTS'i açık farkla geçiyor (+5.5 / +2.7): bu oyunda
 belirleyici olan ağaç değil, doğru ufuk, aday genişliği ve değerlendirme kalitesi.
 
+### Doğa jetonuyla jeton silme (`wipes.py`, `nature_wipes=true`, varsayılan kapalı)
+
+Silinecek ortadaki jetonlar için yerine gelecekler torbanın açık içeriğinden örneklenir; beklenen en iyi
+hamle değeri, harcanan jetonun 1 puanını ve bir eşiği aşarsa silinir. Seçilen silme bağımsız örneklerle
+yeniden doğrulanır ("kazananın laneti": birkaç gürültülü tahminin en büyüğü fazla iyimserdir).
+
+| Ayar (aynı tohumlarla silmesiz sürüme karşı, 400 oyun) | Puan farkı |
+|---|---|
+| heuristic, 8 örnek, doğrulamasız | −1.07 ± 0.40 |
+| heuristic, 8 örnek, doğrulamalı | −0.81 ± 0.40 |
+| heuristic, 24 örnek | +0.01 ± 0.37 |
+| heuristic, 24 örnek, eşik 1 | +0.32 ± 0.39 |
+| value, 24 örnek | −0.41 ± 0.35 |
+| heuristic solo, 300 oyun | 92.0 / 92.7 (silmesiz) |
+
+Sonuç: bu değerlendirmeyle silme en iyi ihtimalle nötr. Ortada 4 çift ve doğa jetonuyla karışık seçim
+zaten yeterli esneklik sağlıyor; harcanan jeton ise kesin 1 puan.
+
 ### 5. Öğrenilmiş değer fonksiyonu (`features.py`, `train_value.py`)
 
 Bir oyuncunun **kalan puanını** (oyun sonu puanı − şu anki puan) tahmin eden doğrusal model.
