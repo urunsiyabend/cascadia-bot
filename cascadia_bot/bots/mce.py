@@ -23,8 +23,10 @@ Budget allocation over candidates (``allocation``):
 * ``halving`` - successive halving: equal budget per round, keep the better
   half of the candidates each round (best-arm identification).
 
-``reward``: ``relative`` (own score minus best opponent, own score in solo) or
-``own`` (own score only). ``opponents``: ``greedy`` or ``random`` playout
+``reward``: ``relative`` (own score minus best opponent, own score in solo),
+``own`` (own score only) or ``win`` (estimated probability of finishing ahead of
+every opponent; the estimate error grows with the turns left, see
+:meth:`MCEBot._win_probability`). ``opponents``: ``greedy`` or ``random`` playout
 policy for the other players (random is cheaper; their score is then
 meaningless, so it is paired with ``reward=own``).
 
@@ -48,6 +50,7 @@ import time
 
 from ..game import Game, Placement
 from .mcts import MCTSBot
+from .probability import turns_left
 from .simple import RandomBot
 
 
@@ -57,13 +60,13 @@ class MCEBot(MCTSBot):
     def __init__(self, seed: int | None = None, playouts: int = 96, time_limit: float = 0.0,
                  top_k: int = 12, allocation: str = "halving", c: float = 4.0, horizon: int = 3,
                  reward: str = "relative", opponents: str = "greedy", potential_weight: float = 1.0,
-                 crn: bool = True, evaluator: str = "learned", **params) -> None:
+                 crn: bool = True, evaluator: str = "learned", win_sigma: float = 2.1, **params) -> None:
         super().__init__(seed, iterations=playouts, time_limit=time_limit, top_k=top_k, depth=horizon,
                          c=c, potential_weight=potential_weight, evaluator=evaluator, **params)
         if allocation not in ("uniform", "ucb", "halving"):
             raise ValueError("allocation must be uniform, ucb or halving")
-        if reward not in ("relative", "own"):
-            raise ValueError("reward must be relative or own")
+        if reward not in ("relative", "own", "win"):
+            raise ValueError("reward must be relative, own or win")
         if opponents not in ("greedy", "random"):
             raise ValueError("opponents must be greedy or random")
         if allocation == "halving" and time_limit > 0:
@@ -72,6 +75,7 @@ class MCEBot(MCTSBot):
         self.crn = bool(crn) and allocation != "ucb"
         self.horizon = int(horizon)
         self.reward_mode = reward
+        self.win_sigma = float(win_sigma)
         self._opponent_policy = (
             RandomBot(seed=self.rng.randrange(2**31)) if opponents == "random" else self._policy
         )
@@ -92,9 +96,27 @@ class MCEBot(MCTSBot):
                 my_moves += 1
             else:
                 sim.apply_placement(self._opponent_policy.choose_placement(sim))
-        if self.reward_mode == "own":
+        if self.reward_mode == "own" or (self.reward_mode == "win" and sim.num_players == 1):
             return self._value(sim, me)
+        if self.reward_mode == "win":
+            return self._win_probability(sim, me)
         return self._reward(sim, me)
+
+    def _win_probability(self, sim: Game, me: int) -> float:
+        """P(our final score beats every opponent's), from estimated final scores.
+
+        The estimate error of a final score difference grows like
+        ``win_sigma * sqrt(turns left)`` (measured on ValueBot self-play: 2.25 points
+        with 1 turn left, 7.6 with 20). At the end of the game this is exactly
+        1 / 0.5 / 0 for win / tie / loss.
+        """
+        totals = [s.total for s in sim.scores()]
+        values = [self._value(sim, p, totals[p]) for p in range(sim.num_players)]
+        diff = values[me] - max(v for i, v in enumerate(values) if i != me)
+        sigma = self.win_sigma * math.sqrt(max(0, turns_left(sim, me)))
+        if sigma <= 1e-9:
+            return 1.0 if diff > 0 else 0.5 if diff == 0 else 0.0
+        return 0.5 * (1.0 + math.erf(diff / (sigma * math.sqrt(2.0))))
 
     def choose_placement(self, game: Game) -> Placement:
         cands = self._ranked(game, use_nature=self.use_nature)

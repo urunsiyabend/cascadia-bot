@@ -383,3 +383,16 @@ def test_plan_bot(replan):
     assert bot.plan_log and bot.plan_log[0][0] == 0
     if replan == "never":
         assert len(bot.plan_log) == 1
+
+
+def test_mce_win_reward():
+    from cascadia_bot.bots.mce import MCEBot
+
+    bot = make_bot("mce:reward=win,playouts=4,top_k=2,horizon=1", seed=0)
+    res = play_game([bot, make_bot("greedy", seed=1)], GameConfig(num_players=2, seed=4))
+    assert res.game.turns_taken == [20, 20]
+    assert isinstance(bot, MCEBot)
+    g = res.game  # game over: exact 1 / 0.5 / 0
+    p = bot._win_probability(g, 0)
+    totals = [s.total for s in g.scores()]
+    assert p == (1.0 if totals[0] > totals[1] else 0.5 if totals[0] == totals[1] else 0.0)
