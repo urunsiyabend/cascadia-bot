@@ -140,7 +140,53 @@ Parametreler spec ile verilir, ör. `mce:horizon=5,playouts=96`, `mcts:depth=3`,
 `heuristic:potential_mode=flat`, `greedy:majority_weight=0`. Gizli bilgiyle hile yapılmaz: simülasyon
 yapan botlar `game.determinize(rng)` ile destenin sırasını ve torbayı yeniden örnekler.
 
-<!-- SONUCLAR -->
+## Sonuçlar (varsayılan ayarlar, rastgele A–D kartları)
+
+**2 oyuncu**, aynı tohumlarla `heuristic`e karşı (oyun başına puan farkı ± standart hata):
+
+| Bot | Oyun | Kazanma | Puan farkı | sn/oyun |
+|---|---|---|---|---|
+| `mce` | 160 | %79.7 | +5.47 ± 0.54 | 9.9 |
+| `mcts:depth=3` | 160 | %63.7 | +2.66 ± 0.57 | 15.4 |
+| `value` | 400 | %64.0 | +2.40 ± 0.38 | 0.14 |
+| `mcts` (derinlik 2) | 160 | %54.7 | +0.20 ± 0.54 | 9.9 |
+| `greedy` | 400 | %25.9 | −5.43 ± 0.42 | 0.03 |
+| `random` | 400 | %0.0 | −62.12 ± 0.48 | ~0 |
+
+**3 oyuncu** (99 oyun, koltuklar dönüşümlü; eşit güçte beklenen %33):
+
+| Bot | Ortalama | Kazanma | sn/oyun |
+|---|---|---|---|
+| `mce` | 98.3 | %60.6 | 15.9 |
+| `value` | 94.6 | %19.2 | 0.15 |
+| `heuristic` | 93.6 | %20.2 | 0.07 |
+
+**4 oyuncu** (100 oyun; beklenen %25):
+
+| Bot | Ortalama | Kazanma | sn/oyun |
+|---|---|---|---|
+| `mce` | 97.8 | %53.0 | 22.5 |
+| `value` | 95.0 | %30.0 | 0.17 |
+| `heuristic` | 92.1 | %15.0 | 0.08 |
+| `greedy` | 86.7 | %2.0 | 0.03 |
+
+**Solo** (aynı 100 tohum; kural kitabı ölçeği: 90+ mükemmel, 100+ elit):
+
+| Bot | Ortalama | sd | min–max | sn/oyun |
+|---|---|---|---|---|
+| `mce` | 98.7 | 5.5 | 87–117 | 4.9 |
+| `value` | 93.7 | 6.0 | 75–106 | 0.13 |
+| `heuristic` | 92.5 | 5.7 | 78–107 | 0.08 |
+| `greedy` | 88.1 | 6.7 | 68–103 | 0.03 |
+
+Tekrar üretmek için:
+
+```bash
+python -m cascadia_bot.sweep --baseline heuristic --games 160 --workers 4 --seed 10000 mce
+python -m cascadia_bot.arena greedy heuristic value mce --solo --games 100 --workers 4 --seed 50000
+python -m cascadia_bot.arena greedy heuristic value mce --games 100 --workers 4 --seed 60000
+python -m cascadia_bot.arena heuristic value mce --games 99 --workers 4 --seed 70000
+```
 
 ## Algoritmalar ve deneyler
 
