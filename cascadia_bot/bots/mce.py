@@ -21,11 +21,23 @@ Budget allocation over candidates (``allocation``):
 ``own`` (own score only). ``opponents``: ``greedy`` or ``random`` playout
 policy for the other players (random is cheaper; their score is then
 meaningless, so it is paired with ``reward=own``).
+
+``crn`` (common random numbers, default on): with ``uniform`` and ``halving``
+every candidate is evaluated on the *same* sampled futures (same hidden tile
+order, bag order and policy tie-breaks).
+
+Measured noise (standard deviation of the score difference between two good
+candidates in one playout): ~2 points with ``horizon=1-2``, ~4-5 with
+``horizon=4`` and ~7-10 for full-game playouts, while good candidates differ by
+1-5 points. Full playouts therefore need 10-15x more samples for the same
+precision: decisions diverge chaotically after a different first move, and CRN
+does not remove that noise.
 """
 
 from __future__ import annotations
 
 import math
+import random
 import time
 
 from ..game import Game, Placement
@@ -39,7 +51,7 @@ class MCEBot(MCTSBot):
     def __init__(self, seed: int | None = None, playouts: int = 48, time_limit: float = 0.0,
                  top_k: int = 8, allocation: str = "halving", c: float = 4.0, horizon: int = 0,
                  reward: str = "relative", opponents: str = "greedy", potential_weight: float = 1.0,
-                 **params) -> None:
+                 crn: bool = True, **params) -> None:
         super().__init__(seed, iterations=playouts, time_limit=time_limit, top_k=top_k, depth=horizon,
                          c=c, potential_weight=potential_weight, **params)
         if allocation not in ("uniform", "ucb", "halving"):
@@ -51,6 +63,7 @@ class MCEBot(MCTSBot):
         if allocation == "halving" and time_limit > 0:
             raise ValueError("halving needs a fixed playout budget (use ucb with time_limit)")
         self.allocation = allocation
+        self.crn = bool(crn) and allocation != "ucb"
         self.horizon = int(horizon)
         self.reward_mode = reward
         self._opponent_policy = (
@@ -58,9 +71,11 @@ class MCEBot(MCTSBot):
         )
 
     # ------------------------------------------------------------------ playouts
-    def _playout(self, game: Game, placement: Placement) -> float:
+    def _playout(self, game: Game, placement: Placement, seed: int) -> float:
         me = game.current_player
-        sim = game.determinize(self.rng)
+        sim = game.determinize(random.Random(seed))
+        self._policy.rng.seed(seed + 1)
+        self._opponent_policy.rng.seed(seed + 2)
         sim.apply_placement(placement)
         my_moves = 1
         while not sim.game_over:
@@ -83,9 +98,15 @@ class MCEBot(MCTSBot):
         visits = [0] * n
         totals = [0.0] * n
 
-        def run(i: int) -> None:
-            totals[i] += self._playout(game, cands[i].placement)
+        def run(i: int, seed: int | None = None) -> None:
+            if seed is None:
+                seed = self.rng.randrange(2**62)
+            totals[i] += self._playout(game, cands[i].placement, seed)
             visits[i] += 1
+
+        def new_seeds(count: int) -> list[int | None]:
+            # Shared futures for every candidate (CRN) or independent ones.
+            return [self.rng.randrange(2**62) for _ in range(count)] if self.crn else [None] * count
 
         if self.allocation == "halving":
             alive = list(range(n))
@@ -93,9 +114,10 @@ class MCEBot(MCTSBot):
             per_round = self.iterations / rounds
             for _ in range(rounds):
                 each = max(1, int(per_round // len(alive)))
+                seeds = new_seeds(each)
                 for i in alive:
-                    for _ in range(each):
-                        run(i)
+                    for seed in seeds:
+                        run(i, seed)
                 if len(alive) == 1:
                     break
                 alive.sort(key=lambda i: totals[i] / visits[i], reverse=True)
@@ -104,20 +126,23 @@ class MCEBot(MCTSBot):
         else:
             deadline = time.perf_counter() + self.time_limit if self.time_limit > 0 else None
             k = 0
+            seed: int | None = None
             while True:
                 if deadline is not None:
                     if k >= n and time.perf_counter() >= deadline:
                         break
                 elif k >= self.iterations:
                     break
-                if k < n:
-                    i = k
-                elif self.allocation == "uniform":
+                if self.allocation == "uniform":
                     i = k % n
+                    if i == 0:
+                        seed = new_seeds(1)[0]
+                elif k < n:
+                    i = k
                 else:
                     log_k = math.log(k)
                     i = max(range(n), key=lambda j: totals[j] / visits[j] + self.c * math.sqrt(log_k / visits[j]))
-                run(i)
+                run(i, seed if self.allocation == "uniform" else None)
                 k += 1
             best = max(range(n), key=lambda j: (totals[j] / visits[j], visits[j]))
 

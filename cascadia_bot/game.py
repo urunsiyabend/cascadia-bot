@@ -136,6 +136,9 @@ class Game:
         rng.shuffle(tiles)
         self.tile_stack: list[Tile] = tiles[: tiles_for_player_count(n)]
         self.bag: list[Wildlife] = [w for w in Wildlife for _ in range(TOKENS_PER_WILDLIFE)]
+        # Simulation copies draw from a pre-shuffled bag order (see determinize) so that
+        # futures sampled with the same seed stay comparable across candidate moves.
+        self.sequential_bag = False
         self.set_aside: list[Wildlife] = []
         self.removed_tokens: list[Wildlife] = []  # solo discards
         self.nature_supply = NATURE_TOKEN_SUPPLY
@@ -155,13 +158,23 @@ class Game:
     # ----------------------------------------------------------------- tokens
     def _draw_token(self) -> Wildlife | None:
         if not self.bag and self.set_aside:
-            self.bag.extend(self.set_aside)
+            self._bag_add(self.set_aside)
             self.set_aside.clear()
         if not self.bag:
             return None
+        if self.sequential_bag:
+            return self.bag.pop()
         i = self._rng.randrange(len(self.bag))
         self.bag[i], self.bag[-1] = self.bag[-1], self.bag[i]
         return self.bag.pop()
+
+    def _bag_add(self, tokens) -> None:
+        """Return tokens to the bag (in sequential mode: at random depths of the pre-shuffled order)."""
+        if not self.sequential_bag:
+            self.bag.extend(tokens)
+            return
+        for t in tokens:
+            self.bag.insert(self._rng.randrange(len(self.bag) + 1), t)
 
     def _wipe_slots(self, slots: list[int]) -> None:
         for s in slots:
@@ -183,7 +196,7 @@ class Game:
             self._wipe_slots(list(range(DISPLAY_SIZE)))
 
     def _return_set_aside(self) -> None:
-        self.bag.extend(self.set_aside)
+        self._bag_add(self.set_aside)
         self.set_aside.clear()
 
     def _begin_turn(self) -> None:
@@ -315,7 +328,7 @@ class Game:
         self.display_tokens[p.token_slot] = None
         board.place_tile(p.tile_pos, tile, p.rotation)
         if p.token_pos is None:
-            self.bag.append(wildlife)
+            self._bag_add([wildlife])
         else:
             if board.place_token(p.token_pos, wildlife):
                 # Supply is tracked for information only; it never runs out in practice.
@@ -413,4 +426,7 @@ class Game:
         g._rng = random.Random(rng.random())
         pool = self.unseen_tiles()
         g.tile_stack = rng.sample(pool, len(self.tile_stack))
+        g.bag = list(self.bag)
+        rng.shuffle(g.bag)
+        g.sequential_bag = True
         return g
