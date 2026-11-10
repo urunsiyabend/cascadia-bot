@@ -364,3 +364,12 @@ def test_train_value_and_learned_bots(tmp_path):
     bots = [make_bot(f"value:model={out}", seed=0), make_bot(f"mce:horizon=1,playouts=4,top_k=2,evaluator=learned,model={out}", seed=1)]
     res = play_game(bots, GameConfig(num_players=2, seed=2))
     assert res.game.turns_taken == [20, 20]
+
+
+def test_selfplay_stats(tmp_path, capsys):
+    from cascadia_bot.selfplay_stats import main as stats_main
+
+    out = tmp_path / "g.jsonl"
+    assert stats_main(["greedy", "--games", "3", "--out", str(out)]) == 0
+    assert len(out.read_text().splitlines()) == 3
+    assert "winner minus loser" in capsys.readouterr().out

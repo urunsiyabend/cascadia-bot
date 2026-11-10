@@ -74,6 +74,7 @@ cascadia_bot/
   arena.py         turnuva / CLI (koltuk rotasyonu, solo kıyas, paralel işlem, JSON çıktı)
   sweep.py         parametre taraması: aynı tohumlarla taban bota karşı puan farkı ± standart hata
   train_value.py   kendi kendine oyundan değer modeli eğitimi
+  selfplay_stats.py aynı botla kendine karşı oyun: kazanan/kaybeden farkları, kart bazında puanlar
   render.py        metin tabanlı tahta çıktısı
   models/          eğitilmiş değer modelleri (value_{1,2,3,4}p.json)
   bots/
@@ -187,6 +188,45 @@ python -m cascadia_bot.arena greedy heuristic value mce --solo --games 100 --wor
 python -m cascadia_bot.arena greedy heuristic value mce --games 100 --workers 4 --seed 60000
 python -m cascadia_bot.arena heuristic value mce --games 99 --workers 4 --seed 70000
 ```
+
+## Strateji analizi: MCE neden güçlü, MCE'ye karşı MCE'de ne kazandırıyor?
+
+`python -m cascadia_bot.selfplay_stats <bot> --games 200 --workers 4` aynı botu iki koltukta oynatır;
+kazanan − kaybeden farkını kategori bazında, kart bazında ortalama puanları ve davranışı (doğa jetonu,
+silme, atılan jeton) raporlar.
+
+**MCE'nin kazancı nereden geliyor?** Solo (aynı 100 tohum), MCE − heuristic: şahin **+4.7**, habitat
+**+3.0**, doğa jetonu +0.8, ayı +0.6; geyik −2.0, tilki −0.7. 4 oyuncuda da aynı desen (şahin +4.5, habitat
++2.5). Şahin desenleri (birbirine komşu olmayan, görüş hattı olan şahinler) ve büyük koridorlar birkaç
+tur sonra ödeme yapar: tek adımlık değerlendirme bunları göremez, gerçek çekilişleri örnekleyerek 3 tur
+ileri bakan MCE görür. Avantajın büyük kısmı kendi ortamını daha iyi kurmaktan geliyor (solo +6.2), rakibi
+engellemekten değil.
+
+**MCE'ye karşı MCE (200 oyun), kazananı ne belirliyor?** Kazanan − kaybeden: toplam +5.8; hayvanlar
++4.1 (şahin +2.8 ± 0.9, somon +1.6 ± 0.6; ayı, geyik, tilki ≈ 0), habitat +0.6, çoğunluk bonusu +0.9.
+Eşit güçteki botlar arasında oyunu en riskli/değişken desenler (şahin, somon koşuları) ve çoğunluk
+bonusları belirliyor.
+
+**Puan farkı mı, kendi puanı mı?** Varsayılan MCE ödülü "benim puanım − rakibin puanı". Yalnız kendi
+puanına bakan sürüm (`mce:reward=own`) ile karşılaştırma:
+
+| Ölçüm | `mce` (puan farkı) | `mce:reward=own` |
+|---|---|---|
+| Kafa kafaya (160 oyun) | – | −0.04 ± 0.52 puan, %47.5 → **eşit** |
+| Kendine karşı ortalama puan | 92.8 | **97.5** |
+| Karışık taslak için harcanan doğa jetonu (oyun başı) | 3.65 | 2.89 |
+| heuristic'e karşı (aynı 160 tohum) | +5.47 ± 0.54, %79.7 | **+6.71 ± 0.57, %83.4** |
+| sn/oyun | 9.9 | 8.2 |
+
+Puan farkını hedeflemek, rakibin işine yarayacak çifti almaya ve doğa jetonu harcamaya iter; kazanma
+şansını artırmaz, iki tarafın puanını da ~5 düşürür. 2 oyunculu ölçümlerde kendi ortamına odaklanmak en az
+onun kadar iyi, daha yüksek puanlı ve daha hızlı. (3–4 oyuncu için bu karşılaştırma yapılmadı; varsayılan
+şimdilik değiştirilmedi.)
+
+**Daha çok hesaplama** (varsayılan MCE'ye karşı, 160 oyun): ufuk 5 +0.84 ± 0.57, 192 simülasyon
++0.95 ± 0.59 (ikisi de anlamlılık sınırında, 1.4–1.8× süre); aynı 96 simülasyonla 20 aday −1.39 ± 0.56
+(aday başına simülasyon azalınca iyi adaylar gürültüyle eleniyor). Aday sayısı bütçeyle birlikte
+artırılmalı.
 
 ## Algoritmalar ve deneyler
 
