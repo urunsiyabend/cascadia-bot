@@ -329,6 +329,24 @@ yeniden doğrulanır ("kazananın laneti": birkaç gürültülü tahminin en bü
 Sonuç: bu değerlendirmeyle silme en iyi ihtimalle nötr. Ortada 4 çift ve doğa jetonuyla karışık seçim
 zaten yeterli esneklik sağlıyor; harcanan jeton ise kesin 1 puan.
 
+### Plan katmanı: insan gibi strateji seçmek (`plan.py`)
+
+Plan = 2 odak hayvan + oyuncunun en büyük koridoru (veya "plansız"). Plan varken hamle değeri greedy +
+plan bonusu (odak hayvan jetonu +1.5, odak hayvanı kabul eden yeni karoyu boş tutmak +0.5, odak yerini başka
+jetonla kapatmak −1, odak koridoru büyütmek karo başına +0.5). Planların beklenen oyun sonu puanı, aynı
+tohumlarla oyun sonuna kadar simülasyonla tahmin edilir; her 3 turda bir yenilenir. `replan`:
+`ev` = alternatif mevcut plandan hem 1 puan hem 2 standart hata fazlaysa değiştir ("devam etmek
+matematiksel olarak mantıksız olduğunda"), `always` = her kontrolde en iyisine geç, `never` = ilk plana bağlı kal.
+
+| Sürüm (greedy'ye karşı, aynı 400 tohum, 2 oyuncu) | Kazanma | Puan farkı | sn/oyun |
+|---|---|---|---|
+| `plan:replan=never` | %46.0 | −0.81 ± 0.45 | 1.6 |
+| `plan` (`ev`) | %52.4 | +0.32 ± 0.44 | 7.2 |
+| `plan:replan=always` | %58.0 | **+1.30 ± 0.41** | 7.1 |
+
+Bağlılık azaldıkça güç artıyor: gelen karo/jetonlar çok rastgele olduğu için birkaç tur önce doğru olan
+odak çabuk eskiyor. Faydalı olan sabit bir plan değil, simülasyonla sık güncellenen hedef.
+
 ### 5. Öğrenilmiş değer fonksiyonu (`features.py`, `train_value.py`)
 
 Bir oyuncunun **kalan puanını** (oyun sonu puanı − şu anki puan) tahmin eden doğrusal model.
