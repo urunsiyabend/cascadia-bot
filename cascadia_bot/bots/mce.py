@@ -10,9 +10,11 @@ policy for ``horizon`` more of our own turns (0 = to the end of the game) and
 evaluate like :class:`MCTSBot` (score + estimated future value). The candidate
 with the best mean reward is played.
 
-Defaults (horizon 5, 96 playouts, 12 candidates, successive halving) come from
-sweeps against ``heuristic``: 81% wins, +5.5 points per game. Full-game
-playouts were much worse (-0.7 to -4.6 points) because of playout noise.
+Defaults come from sweeps against ``heuristic`` (2 players, 160 games each):
+horizon 3, 96 playouts, 12 candidates, successive halving and the learned
+value model as leaf evaluator (+5.9 points per game, 75% wins, ~10 s per game;
+horizon 5 with the hand-written potential: +5.5 at ~15 s). Full-game playouts
+were much worse (-0.7 to -4.6 points) because of playout noise.
 
 Budget allocation over candidates (``allocation``):
 
@@ -53,11 +55,11 @@ class MCEBot(MCTSBot):
     name = "mce"
 
     def __init__(self, seed: int | None = None, playouts: int = 96, time_limit: float = 0.0,
-                 top_k: int = 12, allocation: str = "halving", c: float = 4.0, horizon: int = 5,
+                 top_k: int = 12, allocation: str = "halving", c: float = 4.0, horizon: int = 3,
                  reward: str = "relative", opponents: str = "greedy", potential_weight: float = 1.0,
-                 crn: bool = True, **params) -> None:
+                 crn: bool = True, evaluator: str = "learned", **params) -> None:
         super().__init__(seed, iterations=playouts, time_limit=time_limit, top_k=top_k, depth=horizon,
-                         c=c, potential_weight=potential_weight, **params)
+                         c=c, potential_weight=potential_weight, evaluator=evaluator, **params)
         if allocation not in ("uniform", "ucb", "halving"):
             raise ValueError("allocation must be uniform, ucb or halving")
         if reward not in ("relative", "own"):

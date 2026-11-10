@@ -108,14 +108,12 @@ class MCTSBot(GreedyBot):
                 best_i, best_u = i, u
         return best_i
 
-    def _model(self, num_players: int) -> LinearValue:
+    def _model(self, num_players: int) -> LinearValue | None:
         model = self._models.get(num_players)
         if model is None:
             model = LinearValue.load(self._model_path) if self._model_path else default_model(num_players)
             if model is not None:
                 self._models[num_players] = model
-        if model is None:
-            raise RuntimeError(f"no trained value model for {num_players} players (run cascadia_bot.train_value)")
         return model
 
     def _value(self, sim: Game, player: int, score: int | None = None) -> float:
@@ -124,7 +122,10 @@ class MCTSBot(GreedyBot):
         if sim.game_over or turns_left(sim, player) <= 0:
             return float(score)
         if self.evaluator == "learned":
-            return score + self.potential_weight * self._model(sim.num_players).predict(game_features(sim, player))
+            model = self._model(sim.num_players)
+            if model is not None:
+                return score + self.potential_weight * model.predict(game_features(sim, player))
+            # no trained model for this player count: fall back to the potential estimate
         if self.potential_weight == 0:
             return float(score)
         gains = best_token_gains(sim.boards[player], sim.cards)
