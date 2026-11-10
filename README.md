@@ -65,16 +65,27 @@ Ek kurallar ve açıklamalar:
 
 ```
 cascadia_bot/
-  components.py   habitatlar, hayvanlar, 85 karo + 5 başlangıç karosu
-  hexgrid.py      eksenel (q, r) hex koordinatları
-  board.py        oyuncu ortamı: karo/jeton yerleştirme, koridorlar (artımlı hesap)
-  scoring.py      tüm puan kartları (A–D ×5, aile, orta seviye), çoğunluk, toplam
-  game.py         oyun durumu ve tur akışı (aşırı nüfus, doğa jetonu, solo, oyun sonu)
-  runner.py       botlarla tek oyun oynatma
-  arena.py        turnuva / CLI (koltuk rotasyonu, paralel işlem, JSON çıktı)
-  render.py       metin tabanlı tahta çıktısı
-  bots/           random, greedy, heuristic, lookahead (Monte Carlo)
-tests/            puan kartları ve kural testleri
+  components.py    habitatlar, hayvanlar, 85 karo + 5 başlangıç karosu
+  hexgrid.py       eksenel (q, r) hex koordinatları
+  board.py         oyuncu ortamı: karo/jeton yerleştirme, koridorlar, hızlı "ya şöyle olsaydı" tablosu
+  scoring.py       tüm puan kartları (A–D ×5, aile, orta seviye), çoğunluk, toplam
+  game.py          oyun durumu ve tur akışı (aşırı nüfus, doğa jetonu, solo, oyun sonu, determinizasyon)
+  runner.py        botlarla tek oyun oynatma
+  arena.py         turnuva / CLI (koltuk rotasyonu, solo kıyas, paralel işlem, JSON çıktı)
+  sweep.py         parametre taraması: aynı tohumlarla taban bota karşı puan farkı ± standart hata
+  train_value.py   kendi kendine oyundan değer modeli eğitimi
+  render.py        metin tabanlı tahta çıktısı
+  models/          eğitilmiş değer modelleri (value_{1,2,3,4}p.json)
+  bots/
+    simple.py        random, greedy, heuristic
+    evaluation.py    hızlı aday değerlendirme, çoğunluk bonusu tahmini
+    probability.py   torba içeriği, sıradaki tur olasılıkları, beklenen en iyi kazanç
+    features.py      durum özellikleri + doğrusal değer modeli
+    value.py         öğrenilmiş değerle tek adımlık bot
+    lookahead.py     basit Monte Carlo ileri bakış
+    mcts.py          determinizasyonlu açık döngü MCTS
+    mce.py           düz Monte Carlo (en güçlü bot)
+tests/             puan kartları, kurallar, hızlı yolların tam hesapla eşdeğerliği, botlar
 ```
 
 ## Kendi botunu yazmak
@@ -113,83 +124,119 @@ print(res.totals, res.winners)
 Botlar canlı `Game` nesnesini alır; gizli bilgiye (`game.tile_stack` sırası, torba RNG'si) bakmamalı.
 Simülasyon için `game.determinize(rng)` gizli bilgiyi yeniden örnekleyen bağımsız bir kopya döndürür.
 
-### Hazır botlar
+## Botlar
 
-| Bot | Fikir |
-|---|---|
-| `random` | rastgele yasal hamle |
-| `greedy` | anlık puan artışını maksimize eder (hayvan + koridor + çoğunluk bonusu tahmini + doğa jetonu) |
-| `heuristic` | greedy + en iyi adayları "geride bıraktığı fırsat değeri" ile yeniden sıralar (olasılık ağırlıklı, aşağıya bakın); işe yaramayan üçlü aşırı nüfusu siler |
-| `lookahead` | en iyi `top_k` aday için `samples` determinize gelecek × `depth` tur greedy rollout (Monte Carlo) |
-| `mcts` | determinizasyonlu, sıra-soyutlamalı açık döngü MCTS (aşağıya bakın) |
-| `mce` | düz Monte Carlo: her aday için oyun sonuna kadar greedy simülasyonlar, ödül puan farkı (Kingdomino makalesinden) |
+| Bot | Fikir | Hız (2 oyuncu, sn/oyun) |
+|---|---|---|
+| `random` | rastgele yasal hamle | ~0 |
+| `greedy` | anlık puan artışı: hayvan + koridor + çoğunluk bonusu tahmini + doğa jetonu | 0.03 |
+| `heuristic` | greedy + en iyi adayları "sıradaki turda alınabilecek en iyi jetonun beklenen değeri" ile yeniden sıralar | 0.07 |
+| `value` | greedy'nin en iyi 12 adayı için hamle sonrası durumun gerçek puanı + öğrenilmiş gelecek değeri | 0.14 |
+| `lookahead` | basit Monte Carlo ileri bakış (eski, yerini `mce` aldı) | ~2–3 |
+| `mcts` | determinizasyonlu, sıra-soyutlamalı açık döngü MCTS | ~10–15 |
+| `mce` | **en güçlü**: düz Monte Carlo, 3 turluk simülasyon + öğrenilmiş değer, ardışık yarılama | ~10 |
 
-Parametreler spec ile verilir: `heuristic:potential_weight=0.5,top_k=16`,
-`lookahead:top_k=8,samples=6,depth=2`, `mcts:iterations=300,depth=3` veya `mcts:time_limit=1.0`.
+Parametreler spec ile verilir, ör. `mce:horizon=5,playouts=96`, `mcts:depth=3`,
+`heuristic:potential_mode=flat`, `greedy:majority_weight=0`. Gizli bilgiyle hile yapılmaz: simülasyon
+yapan botlar `game.determinize(rng)` ile destenin sırasını ve torbayı yeniden örnekler.
 
-**Olasılık hesabı** (`cascadia_bot/bots/probability.py`): torbanın içeriği açık bilgiden kesin
-hesaplanır (her türden 20 − tahtalarda/ortada/kenarda görünenler). Buradan, oyuncunun bir sonraki
-turunda her hayvanın ortada bulunma olasılığı tahmin edilir (kalan 3 jeton + sıradaki çekilişler
-havuzu, Poisson yaklaşımı). `heuristic` botunun fırsat değeri `potential_mode` ile seçilir:
+<!-- SONUCLAR -->
 
-| `potential_mode` | Fırsat değeri |
-|---|---|
-| `flat` | her hayvan için "bir jeton daha gelirse en iyi kazanç" toplamı (olasılıksız) |
-| `prob` | aynı toplam, her terim o hayvanın gelme olasılığıyla çarpılır |
-| `expmax` (varsayılan) | sıradaki turda gelecek hayvanlar arasından alınabilecek **en iyi** kazancın beklenen değeri (tek jeton alınabildiği için) |
+## Algoritmalar ve deneyler
 
-Son turda fırsat değeri 0'dır. Ölçüm (`potential_weight=1`): solo 400 oyunda `expmax` 93.2 / `flat`
-92.3 puan; 2 oyunculu kafa kafaya 400 oyunda `expmax` %56 kazandı.
+Tüm karşılaştırmalar `python -m cascadia_bot.sweep` ile yapıldı: aday bot, aynı tohumlarla (aynı kartlar,
+aynı desteler) taban bota karşı 2 oyunculu oynar, koltuklar dönüşümlüdür. "Puan farkı" oyun başına aday −
+taban puanı ± standart hatadır; kazanma oranından çok daha az gürültülü bir ölçüdür.
 
-**MCTS** (`cascadia_bot/bots/mcts.py`): her iterasyon gizli bilgiyi yeniden örnekler
-(`game.determinize`). Kökte gerçek en iyi `top_k` aday, daha derinde ise "greedy sıralamasındaki
-k'inci hamle" kenar olarak kullanılır (determinizasyonlar arasında somut hamleler değiştiği için).
-Aşamalı genişletme ile ziyaret arttıkça daha fazla aday açılır; rakipler simülasyonda greedy oynar.
-`depth` kendi turumuz kadar ilerledikten sonra pozisyon `puan + potential_weight × fırsat değeri`
-ile değerlendirilir; ödül kendi değerimiz eksi en iyi rakibin değeri. Parametreler: `iterations`
-(veya `time_limit` saniye), `top_k`, `depth`, `c` (UCB keşif sabiti, puan cinsinden),
-`widen_c`, `widen_alpha`, `potential_weight`. Son hamlenin istatistikleri `bot.last_stats` içinde.
+### 1. Çoğunluk bonusu tahmini (`greedy`, `heuristic`, `value`, simülasyonlar)
 
-İlk ölçüm (varsayılanlar: 150 iterasyon, `top_k=8`, `depth=2`), rakip `heuristic`:
-
-| Karşılaşma | Oyun | Ortalama puan (mcts / heuristic) | MCTS kazanma | Süre (s/oyun) |
-|---|---|---|---|---|
-| 2 oyuncu | 120 | 92.0 / 91.2 | %57.9 | 25.8 / 0.15 |
-| solo | 60 | 93.4 / 92.9 | – | 11.8 / 0.18 |
-
-**Çoğunluk bonusu tahmini** (`greedy`, `heuristic`, `lookahead` için ortak): her aday hamlede,
-rakiplerin *şu anki* en büyük koridorlarına göre kendi bonusundaki değişim hesaplanır ve
-`majority_weight × (tur / 20)` ile ağırlıklandırılır (rakipler henüz büyüyeceği için oyun başında
-az, sonda tam). `majority_weight=0` bonusu tamamen yok sayar, `majority_ramp=false` ağırlığı
-baştan tam verir.
-
-Ölçümler (`majority_weight=1`, ramp açık, eski sürüm = `majority_weight=0`):
+Her aday hamlede rakiplerin *şu anki* en büyük koridorlarına göre kendi bonus değişimi hesaplanır ve
+`majority_weight × (tur / 20)` ile ağırlıklandırılır (rakipler henüz büyüyeceği için oyun başında az).
 
 | Karşılaşma | Oyun | Ortalama puan (yeni / eski) | Yeninin kazanma oranı |
 |---|---|---|---|
 | greedy, 2 oyuncu | 600 | 88.2 / 86.6 | %57.3 |
 | heuristic, 2 oyuncu | 400 | 91.4 / 90.6 | %53.8 |
-| greedy, 4 oyuncu (eski, ağırlık 1, ağırlık 2, ramp'sız) | 200 | 87.9 / 87.9 | %30.8 (beklenen %25; ramp'sız %19) |
+| greedy, 4 oyuncu | 200 | 87.9 / 87.9 | %30.8 (beklenen %25; ağırlık baştan tam verilirse %19) |
 | greedy, solo | 400 | 88.0 / 87.8 | – |
 
-**Rakibin bonusunu düşürme** (`majority_denial`, varsayılan 0): rakiplerden alınan bonus puanını da
-değer olarak sayar; `denial_target=leader` yalnızca skorda öndeki rakibi, `mean` tüm rakiplerin
-ortalamasını hesaba katar. Ölçümlerde anlamlı bir kazanç görülmedi, bu yüzden kapalı:
+Rakibin bonusunu düşürmeyi ayrıca ödüllendirmek (`majority_denial`) anlamlı kazanç getirmedi
+(2 oyuncu %51.6–52.2, 3–4 oyuncu baz ile aynı ya da kötü), bu yüzden kapalı.
 
-| Karşılaşma | Oyun | Kazanma oranı (denial / baz) |
+### 2. Olasılık hesabı (`probability.py`)
+
+Torbanın içeriği açık bilgiden kesin hesaplanır (her türden 20 − görünenler). Sıradaki turda her hayvanın
+ortada olma olasılığı tahmin edilir. `heuristic` botunun fırsat değeri (`potential_mode`):
+`flat` (olasılıksız toplam), `prob` (olasılık ağırlıklı toplam), `expmax` (varsayılan; tek jeton
+alınabildiği için gelecek hayvanlar arasından **en iyi** kazancın beklenen değeri). Solo 400 oyunda
+`expmax` 93.2 / `flat` 92.3; 2 oyunculu kafa kafaya 400 oyunda `expmax` %56.
+
+### 3. MCTS (`mcts.py`)
+
+Her iterasyon gizli bilgiyi yeniden örnekler. Kökte gerçek adaylar, derinde "greedy sıralamasındaki
+k'inci hamle" kenar olarak kullanılır (somut hamleler determinizasyonlar arasında değiştiği için);
+aşamalı genişletme, greedy rakipler, `depth` tur sonra değerlendirme.
+
+| Ayar (taban: heuristic, 160 oyun) | Kazanma | Puan farkı | sn/oyun |
+|---|---|---|---|
+| derinlik 2, 150 iterasyon | %54.7 | +0.20 ± 0.54 | 9.9 |
+| derinlik 3 | %63.7 | +2.66 ± 0.57 | 15.4 |
+
+### 4. Düz Monte Carlo — MCE (`mce.py`)
+
+Kingdomino çalışmasında (Gedda vd., 2018) düz Monte Carlo UCT'yi geçmişti. Her aday için gizli bilgi
+yeniden örneklenir, hamle oynanır, herkes `horizon` tur greedy oynar, pozisyon değerlendirilir; bütçe
+ardışık yarılama ile dağıtılır (her turda kötü yarı elenir).
+
+**Oyun sonuna kadar simülasyon işe yaramadı.** İki iyi aday arasındaki fark tek simülasyonda oyun sonunda
+~7–10 puan gürültü içinde kalıyor (1–2 tur ufukta ~2 puan); adaylar arasındaki gerçek fark ise 1–5 puan.
+Farklı ilk hamleden sonra kararlar kaotik biçimde ayrıştığı için ortak rastgele sayılar ve sabit torba
+sırası bu gürültüyü azaltmadı. Kısa ufuk + iyi değerlendirme çözüm oldu:
+
+| Ayar (taban: heuristic, 160 oyun) | Kazanma | Puan farkı | sn/oyun |
+|---|---|---|---|
+| oyun sonu, 24 / 48 simülasyon | %34.1 / %41.6 | −2.49 / −0.72 | 9 / 18 |
+| ufuk 2, 96 sim. | %60.3 | +1.43 ± 0.63 | 6.3 |
+| ufuk 3, 96 sim. | %71.2 | +3.87 ± 0.58 | 9.2 |
+| ufuk 3, 192 sim. | %73.1 | +4.79 ± 0.60 | 19.0 |
+| ufuk 4, 96 sim. | %74.4 | +4.61 ± 0.60 | 11.6 |
+| ufuk 5, 96 sim. | %76.6 | +4.79 ± 0.59 | 13.5 |
+| ufuk 5, 96 sim., 12 aday | %81.2 | +5.53 ± 0.50 | 15.4 |
+| ufuk 8, 96 sim. | %70.6 | +3.89 ± 0.62 | 23.0 |
+| ufuk 2, 12 aday, **öğrenilmiş değer** | %70.3 | +4.88 ± 0.64 | 7.1 |
+| **ufuk 3, 12 aday, öğrenilmiş değer (varsayılan)** | %75.0 | **+5.85 ± 0.64** | 10.2 |
+| ufuk 5, 12 aday, öğrenilmiş değer | %75.9 | +5.52 ± 0.63 | 15.8 |
+
+Aynı süre bütçesinde ağaçsız MCE, ağaçlı MCTS'i açık farkla geçiyor (+5.5 / +2.7): bu oyunda
+belirleyici olan ağaç değil, doğru ufuk, aday genişliği ve değerlendirme kalitesi.
+
+### 5. Öğrenilmiş değer fonksiyonu (`features.py`, `train_value.py`)
+
+Bir oyuncunun **kalan puanını** (oyun sonu puanı − şu anki puan) tahmin eden doğrusal model.
+Özellikler: kalan tur, doğa jetonu, her habitat için en büyük koridorun açık kenarları ve rakiplerle
+farkı, her hayvan için (puan kartına göre ayrı ağırlıkla) jeton sayısı, açık yer sayısı, bir jeton daha
+gelirse en iyi kazanç, torba oranı ve sıradaki tur olasılığı. Kendi kendine oyunlardan ridge regresyonla
+eğitilir; politika iterasyonu: önce `heuristic`/`greedy` oyunları, sonra modeli kullanan `value` botunun
+oyunları.
+
+```bash
+python -m cascadia_bot.train_value --players 2 --games 6000 --workers 4 --policy value value heuristic
+```
+
+| Model (2 oyuncu) | Test hatası (yalnız zaman / model) | value botu, heuristic'e karşı |
 |---|---|---|
-| 2 oyuncu, denial=1 | 600 | %51.6 / %48.4 |
-| 2 oyuncu, denial=0.5 | 600 | %52.2 / %47.8 |
-| 4 oyuncu: leader=1 / leader=0.5 / mean=1 / baz | 400 | %28.0 / %23.6 / %23.5 / %24.9 |
-| 3 oyuncu: leader=1 / mean=1 / baz | 399 | %29.1 / %34.2 / %36.7 |
+| v1 (heuristic+greedy oyunları, 4000) | 5.37 / 4.76 puan | %61.8, +1.81 ± 0.38 (400 oyun) |
+| v2 (value oyunları, 6000) — **varsayılan** | 4.99 / 4.15 puan | %64.0, +2.40 ± 0.38 (400 oyun) |
+| v3 (v2 ile value oyunları) | 4.96 / 4.16 puan | v2'ye karşı −0.03 ± 0.25 → doygun |
 
-**MCE** (`cascadia_bot/bots/mce.py`): Gedda vd. (2018) Kingdomino çalışmasında düz Monte Carlo,
-greedy simülasyonlar ve puan farkı ödülüyle UCT'yi geçmişti. Her aday hamle için gizli bilgi yeniden
-örneklenir, hamle oynanır ve tüm oyuncular oyun sonuna kadar greedy oynar. Parametreler:
-`playouts` (veya `time_limit`), `top_k`, `allocation` (`halving` = ardışık yarılama, `ucb`,
-`uniform`), `horizon` (0 = oyun sonu), `reward` (`relative` / `own`), `opponents`
-(`greedy` / `random`).
+v2, v1'i kafa kafaya 800 oyunda +0.67 ± 0.27 puan farkla yendi. 1, 3 ve 4 oyuncu için de iki
+iterasyonla eğitilmiş modeller `models/` altında.
 
-**Parametre taraması**: `python -m cascadia_bot.sweep --baseline heuristic --games 200 --workers 4
-spec1 spec2 ...` her spec'i aynı tohumlarla taban bota karşı oynatır; kazanma oranı ve oyun başına
-puan farkı ± standart hata verir.
+## Kaynaklar
+
+- Resmi kural kitabı (AEG / Flatout Games) ve tasarımcının BGG / FAQ açıklamaları
+- Gedda, Lagerkvist, Butler — [Monte Carlo Methods for the Game Kingdomino](https://arxiv.org/abs/1807.04458) (2018)
+- Cowling, Powley, Whitehouse — Information Set Monte Carlo Tree Search (2012)
+- Szubert, Jaśkowski — Temporal Difference Learning of N-Tuple Networks for the Game 2048 (2014)
+- Couëtoux vd. — Continuous Upper Confidence Trees / progressive widening (2011)
+- Karo verisi [davidxmoody/cascadia-ai](https://github.com/davidxmoody/cascadia-ai) ile çapraz kontrol edildi
