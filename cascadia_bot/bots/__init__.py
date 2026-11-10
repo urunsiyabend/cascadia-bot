@@ -13,6 +13,7 @@ from .base import Bot
 from .lookahead import LookaheadBot
 from .mce import MCEBot
 from .mcts import MCTSBot
+from .plan import PlanBot
 from .simple import GreedyBot, HeuristicBot, RandomBot
 from .value import ValueBot
 
@@ -23,7 +24,7 @@ def register(name: str, factory: Callable[..., Bot]) -> None:
     BOT_REGISTRY[name] = factory
 
 
-for _cls in (RandomBot, GreedyBot, HeuristicBot, LookaheadBot, MCTSBot, MCEBot, ValueBot):
+for _cls in (RandomBot, GreedyBot, HeuristicBot, LookaheadBot, MCTSBot, MCEBot, ValueBot, PlanBot):
     register(_cls.name, _cls)
 
 
@@ -62,6 +63,7 @@ __all__ = [
     "MCTSBot",
     "MCEBot",
     "ValueBot",
+    "PlanBot",
     "make_bot",
     "register",
     "BOT_REGISTRY",

@@ -373,3 +373,13 @@ def test_selfplay_stats(tmp_path, capsys):
     assert stats_main(["greedy", "--games", "3", "--out", str(out)]) == 0
     assert len(out.read_text().splitlines()) == 3
     assert "winner minus loser" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("replan", ["ev", "always", "never"])
+def test_plan_bot(replan):
+    bot = make_bot(f"plan:replan={replan},samples=2,check_every=5", seed=0)
+    res = play_game([bot, make_bot("greedy", seed=1)], GameConfig(num_players=2, seed=3))
+    assert res.game.turns_taken == [20, 20]
+    assert bot.plan_log and bot.plan_log[0][0] == 0
+    if replan == "never":
+        assert len(bot.plan_log) == 1
