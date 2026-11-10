@@ -74,7 +74,8 @@ class MCTSBot(GreedyBot):
         self.potential_weight = float(potential_weight)
         common = dict(majority_weight=self.majority_weight, majority_ramp=self.majority_ramp)
         self._policy = GreedyBot(seed=self.rng.randrange(2**31), use_nature=False, **common)
-        self._wiper = HeuristicBot(seed=self.rng.randrange(2**31))
+        self._wiper = HeuristicBot(seed=self.rng.randrange(2**31), nature_wipes=self.nature_wipes,
+                                   wipe_samples=self.wipe_samples, wipe_margin=self.wipe_margin)
         self.last_stats: dict = {}
 
     # ------------------------------------------------------------------ helpers

@@ -7,6 +7,7 @@ from ..game import Game, Placement, PreAction, WipeOverpopulation
 from .base import Bot
 from .evaluation import Candidate, TokenGainCache, best_candidate, evaluate_candidates
 from .probability import best_token_gains, expected_best, next_turn_availability, turns_left
+from .wipes import choose_nature_wipe
 
 
 class RandomBot(Bot):
@@ -43,14 +44,23 @@ class GreedyBot(Bot):
             opponents' corridors still grow.
         majority_denial: weight of bonus points taken away from opponents.
         denial_target: "leader" (opponent ahead on score) or "mean" (all opponents).
+        nature_wipes: spend nature tokens to wipe display tokens when the sampled
+            expected gain beats the token's value (see :mod:`.wipes`).
+        wipe_samples / wipe_margin: redraw samples per candidate wipe, required gain.
     """
 
     name = "greedy"
 
     def __init__(self, seed: int | None = None, use_nature: bool = True, nature_value: float = 1.0,
                  token_bonus: float = 0.1, majority_weight: float = 1.0, majority_ramp: bool = True,
-                 majority_denial: float = 0.0, denial_target: str = "leader", **params) -> None:
+                 majority_denial: float = 0.0, denial_target: str = "leader", nature_wipes: bool = False,
+                 wipe_samples: int = 8, wipe_margin: float = 0.5, wipe_validate: bool = True,
+                 **params) -> None:
         super().__init__(seed, **params)
+        self.nature_wipes = bool(nature_wipes)
+        self.wipe_samples = int(wipe_samples)
+        self.wipe_margin = float(wipe_margin)
+        self.wipe_validate = bool(wipe_validate)
         self.use_nature = bool(use_nature)
         self.nature_value = float(nature_value)
         self.token_bonus = float(token_bonus)
@@ -74,6 +84,24 @@ class GreedyBot(Bot):
 
     def choose_placement(self, game: Game) -> Placement:
         return best_candidate(self.candidates(game), self.rng).placement
+
+    def choose_pre_action(self, game: Game) -> PreAction | None:
+        if not self.nature_wipes:
+            return None
+        return choose_nature_wipe(
+            game,
+            self.rng,
+            samples=self.wipe_samples,
+            margin=self.wipe_margin,
+            nature_value=self.nature_value,
+            validate=self.wipe_validate,
+            eval_kwargs=dict(
+                use_nature=self.use_nature,
+                token_bonus=self.token_bonus,
+                majority_weight=self.majority_weight,
+                majority_ramp=self.majority_ramp,
+            ),
+        )
 
 
 class HeuristicBot(GreedyBot):
@@ -124,12 +152,12 @@ class HeuristicBot(GreedyBot):
 
     def choose_pre_action(self, game: Game) -> PreAction | None:
         kind = game.overpopulated_three()
-        if kind is None or not game.can_wipe_overpopulation():
-            return None
-        board = game.board
-        gains = TokenGainCache(board, game.cards)
-        useful = any(gains.gain(kind, s) > 0 for s in board.token_spots(kind))
-        return None if useful else WipeOverpopulation()
+        if kind is not None and game.can_wipe_overpopulation():
+            board = game.board
+            gains = TokenGainCache(board, game.cards)
+            if not any(gains.gain(kind, s) > 0 for s in board.token_spots(kind)):
+                return WipeOverpopulation()
+        return super().choose_pre_action(game)  # optional nature-token wipe
 
     def choose_placement(self, game: Game) -> Placement:
         cands = self.candidates(game)

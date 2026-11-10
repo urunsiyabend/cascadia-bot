@@ -27,7 +27,8 @@ class ValueBot(GreedyBot):
         self.weight = float(weight)
         self._model_path = model
         self._models: dict[int, LinearValue] = {}
-        self._wiper = HeuristicBot(seed=self.rng.randrange(2**31))
+        self._wiper = HeuristicBot(seed=self.rng.randrange(2**31), nature_wipes=self.nature_wipes,
+                                   wipe_samples=self.wipe_samples, wipe_margin=self.wipe_margin)
 
     def _model(self, n: int) -> LinearValue:
         if n not in self._models:
