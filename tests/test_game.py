@@ -396,3 +396,18 @@ def test_mce_win_reward():
     p = bot._win_probability(g, 0)
     totals = [s.total for s in g.scores()]
     assert p == (1.0 if totals[0] > totals[1] else 0.5 if totals[0] == totals[1] else 0.0)
+
+
+def test_plan_stats_and_games_out(tmp_path):
+    import json
+
+    from cascadia_bot.sweep import evaluate
+
+    out = tmp_path / "games.jsonl"
+    evaluate("plan:replan=always,samples=1,check_every=7", "greedy", 2, 900500, None, 1, str(out))
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert len(rows) == 2 and {r["seats"].index(r["spec"]) for r in rows} == {0, 1}
+    for r in rows:
+        stats = r["bot_stats"][r["seats"].index(r["spec"])]
+        assert stats["evaluations"] == 3  # turns 0, 7, 14
+        assert stats["sim_decisions"] > 0 and "plan_log" in stats

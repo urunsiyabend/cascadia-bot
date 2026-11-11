@@ -63,11 +63,24 @@ class PlanBot(GreedyBot):
         self.plan: Plan | None = None
         self.plan_log: list[tuple[int, str]] = []
         self.switches = 0
+        self.sim_decisions = 0  # placements simulated in rollouts (compute budget unit)
+        self.evaluations = 0  # number of plan (re-)evaluations
 
     def reset(self, game: Game, player: int) -> None:
         self.plan = None
         self.plan_log = []
         self.switches = 0
+        self.sim_decisions = 0
+        self.evaluations = 0
+
+    def stats(self) -> dict:
+        """Per-game statistics, recorded by the arena / sweep tools."""
+        return {
+            "switches": self.switches,
+            "plan_log": self.plan_log,
+            "sim_decisions": self.sim_decisions,
+            "evaluations": self.evaluations,
+        }
 
     # ------------------------------------------------------------------ plan policy
     def _bonus(self, game: Game, cand: Candidate, plan: Plan, focus_habitat: Habitat) -> float:
@@ -121,6 +134,7 @@ class PlanBot(GreedyBot):
                 sim.apply_placement(self._plan_move(sim, plan, False, rng))
             else:
                 sim.apply_placement(self._opponent.choose_placement(sim))
+            self.sim_decisions += 1
         return float(sim.scores()[me].total)
 
     def _estimates(self, game: Game) -> dict[Plan, tuple[float, float]]:
@@ -138,6 +152,7 @@ class PlanBot(GreedyBot):
             if self.replan == "never" or turn % self.check_every != 0:
                 return
         est = self._estimates(game)
+        self.evaluations += 1
         best = max(est, key=lambda p: est[p][0])
         if self.plan is None:
             self.plan = best

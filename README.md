@@ -247,13 +247,18 @@ onun kadar iyi, daha yüksek puanlı ve daha hızlı. (3–4 oyuncu için bu kar
 (aday başına simülasyon azalınca iyi adaylar gürültüyle eleniyor). Aday sayısı bütçeyle birlikte
 artırılmalı.
 
-## Hipotez testleri
+## Hipotez testleri (keşifsel)
+
+> Bu bölüm ve README'deki diğer tüm deneyler **keşifseldir**: hipotezleri ürettiler, ama çoklu karşılaştırma
+> düzeltmesi yapılmadı ve bazı karşılaştırmalarda hesaplama bütçesi eşit değildi. Doğrulayıcı deneyler,
+> yeni tohumlar ve önceden sabitlenmiş analizle [`docs/preregistration.md`](docs/preregistration.md)
+> dosyasında tanımlanıyor.
 
 | # | Hipotez | Deney | Sonuç |
 |---|---|---|---|
 | H1 | Başlayan oyuncu avantajlı mı? | `value` kendine karşı, 3000 oyun | **Hayır.** Başlayan %48.2 kazanıyor (± 0.9), puan farkı −0.26 ± 0.14: sınırda, küçük bir ikinci oyuncu avantajı (son hamle?) |
-| H2 | Başlangıç karosu puanı etkiliyor mu? | 5 başlangıç karosu, 2000 solo `value` oyunu | **Hayır.** Ortalamalar 94.7–95.3; ANOVA F(4,1995) = 0.92 (p > 0.05) |
-| H3 | Doğa jetonu 1 puandan değerli mi? | greedy'nin jetona biçtiği değer, greedy'ye karşı 400'er oyun | **Evet.** Değer 0.5: −1.04; 2: +1.20; 3: +1.63; **4: +1.71 ± 0.42**; 6: +0.59. `value` botunda daha küçük (3: +0.73 ± 0.39) çünkü öğrenilmiş model jetonları kısmen hesaba katıyor |
+| H2 | Başlangıç karosu puanı etkiliyor mu? | 5 başlangıç karosu, 2000 solo `value` oyunu | **Fark bulunmadı.** Ortalamalar 94.7–95.3 (SE ~0.27); ANOVA F(4,1995) = 0.92. Bu, eşdeğerliğin kanıtı değildir; yalnızca bu botla karolar arasında ~1 puandan büyük bir fark olmadığını gösterir |
+| H3 | Greedy'nin doğa jetonuna biçtiği ağırlık önemli mi? | greedy'nin jetona biçtiği değer, greedy'ye karşı 400'er oyun | **Evet.** Değer 0.5: −1.04; 2: +1.20; 3: +1.63; **4: +1.71 ± 0.42**; 6: +0.59. `value` botunda daha küçük (3: +0.73 ± 0.39). Bu, değerlendirme fonksiyonunun kalibrasyonu hakkında bir bulgu; jetonun gerçek marjinal değerinin 3–4 puan olduğunu göstermez (bunun için aynı durumdan harcama/saklama karşıolguları gerekir) |
 | H4 | Yeniden planlama kuralı eşiğe duyarlı mı? | `plan` sürümleri, greedy'ye karşı 400'er oyun | Eşik gevşetmek etkisiz (+0.47 ± 0.42). Belirleyici olan sıklık: her tur yeniden seçen `plan:replan=always,check_every=1` **+3.50 ± 0.40, %70.4** |
 | H5 | 4 oyuncuda kendi puanı mı, puan farkı mı? | 2 `mce:reward=own` + 2 `mce`, 80 benzersiz oyun | **Kendi puanı.** Takım farkı +1.81 ± 0.40 (z = 4.5), kazanma payı %66.2 |
 | H6 | Esnek plan 4 oyuncuda da kazandırır mı? | 2 `plan:replan=always` + 2 greedy, 160 benzersiz oyun | **Evet.** Takım farkı +1.39 ± 0.43 (z = 3.2), kazanma payı %54.4 (2 oyuncuda +1.30 ± 0.41) |
@@ -277,8 +282,9 @@ oyun başına puan farkı (ikili farklardan ağırlıklı en küçük kareler).
 | 5 | `mce:reward=relative` (eski varsayılan) | −0.97 | |
 | 6 | `mce:reward=win` (kazanma olasılığı) | −1.23 | own'a −1.93 ± 0.83, %40 |
 
-Kazanma olasılığını maksimize etmek (`reward=win`, P(kazanmak) = Φ(fark / 2.1·√kalan tur), hata ölçümü
-`value` oyunlarından) işe yaramadı: büyük farkla önde/geride iken olasılık ≈1/≈0'a doyar, adaylar
+Kazanma olasılığını maksimize etmenin **bu uygulaması** (`reward=win`, P(kazanmak) = Φ(fark / 2.1·√kalan
+tur), hata ölçümü `value` oyunlarından) işe yaramadı. Bu, gerçek kazanma olasılığını maksimize etmenin kötü
+olduğu anlamına gelmez; bulgu bu normal yaklaşımlı, doygunlaşan ödülle sınırlıdır: büyük farkla önde/geride iken olasılık ≈1/≈0'a doyar, adaylar
 ayrışmaz ve gürültülü 96 simülasyonla bilgi kaybolur; puanı büyütmek ise rastgele çekilişlere karşı tampon
 oluşturur. İyi sürümler arasında küçük bir döngü (own > ufuk 5 > 192 sim. > own) görünüyor ama farklar
 hata payı (±0.9) içinde.
@@ -384,8 +390,12 @@ matematiksel olarak mantıksız olduğunda"), `always` = her kontrolde en iyisin
 | `plan` (`ev`) | %52.4 | +0.32 ± 0.44 | 7.2 |
 | `plan:replan=always` | %58.0 | **+1.30 ± 0.41** | 7.1 |
 
-Bağlılık azaldıkça güç artıyor: gelen karo/jetonlar çok rastgele olduğu için birkaç tur önce doğru olan
-odak çabuk eskiyor. Faydalı olan sabit bir plan değil, simülasyonla sık güncellenen hedef.
+Bağlılık azaldıkça güç artıyor. Kapsam notu: buradaki "plan" bir hedef son durum değil, bir **stratejik
+tercih** (odak hayvanlar); odak habitat `never`'da bile her hamlede güncelleniyor ve hamle düzeyinde tüm
+botlar gelen karolara tepki veriyor. Dolayısıyla bulgu "stratejik tercihleri sık güncellemek, bu politikalar
+altında kazandırıyor" şeklindedir; uzun vadeli (son durum hedefli) planlama hakkında değildir. Her tur
+güncelleyen sürümün avantajı (+3.50) kısmen 2.8× hesaplamadan da gelebilir; eşit bütçeli doğrulama
+[`docs/preregistration.md`](docs/preregistration.md) dosyasında planlandı.
 
 ### 5. Öğrenilmiş değer fonksiyonu (`features.py`, `train_value.py`)
 

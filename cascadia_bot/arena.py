@@ -54,6 +54,7 @@ def _run_job(job: GameJob) -> dict:
         "scores": [s.as_dict() for s in result.scores],
         "winners": result.winners,
         "seconds": result.decision_seconds,
+        "bot_stats": [bot.stats() if hasattr(bot, "stats") else {} for bot in bots],
     }
 
 
