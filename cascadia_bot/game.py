@@ -92,6 +92,12 @@ class GameConfig:
     cards: ScoringCards | None = None  # None -> random A-D card per wildlife
     habitat_majority: bool = True
     seed: int | None = None
+    # "random": every draw picks a uniformly random token from the bag.
+    # "presorted": the bag is shuffled once at setup and tokens are drawn in that order;
+    # returned tokens are reinserted at uniformly random positions. Both give uniformly
+    # random draws; "presorted" keeps the token sequence of a seed much more similar
+    # across agents that act differently (common random numbers for paired experiments).
+    token_order: str = "random"
 
 
 @dataclass
@@ -139,6 +145,11 @@ class Game:
         # Simulation copies draw from a pre-shuffled bag order (see determinize) so that
         # futures sampled with the same seed stay comparable across candidate moves.
         self.sequential_bag = False
+        if config.token_order not in ("random", "presorted"):
+            raise ValueError("token_order must be 'random' or 'presorted'")
+        if config.token_order == "presorted":
+            rng.shuffle(self.bag)
+            self.sequential_bag = True
         self.set_aside: list[Wildlife] = []
         self.removed_tokens: list[Wildlife] = []  # solo discards
         self.nature_supply = NATURE_TOKEN_SUPPLY

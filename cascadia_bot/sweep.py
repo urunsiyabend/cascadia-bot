@@ -22,13 +22,14 @@ from .arena import run_tournament
 
 
 def evaluate(spec: str, baseline: str, games: int, seed: int, cards: str | None, workers: int,
-             games_out: str | None = None) -> dict:
+             games_out: str | None = None, token_order: str = "random") -> dict:
     t0 = time.time()
-    _, results = run_tournament([spec, baseline], games, seed, cards, True, False, workers)
+    _, results = run_tournament([spec, baseline], games, seed, cards, True, False, workers,
+                                token_order=token_order)
     if games_out:
         with open(games_out, "a") as f:
             for r in results:
-                f.write(json.dumps({**r, "spec": spec, "baseline": baseline}) + "\n")
+                f.write(json.dumps({**r, "spec": spec, "baseline": baseline, "token_order": token_order}) + "\n")
     diffs, wins = [], 0.0
     for r in results:
         me = r["seats"].index(spec)
@@ -59,13 +60,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--json", help="append results (one JSON object per line)")
     ap.add_argument("--games-out", help="append every individual game (one JSON object per line)")
+    ap.add_argument("--token-order", choices=["random", "presorted"], default="random",
+                    help="token draw mechanism (see GameConfig.token_order)")
     args = ap.parse_args(argv)
     cards = None if args.cards == "random" else args.cards
 
     width = max(len(s) for s in args.specs) + 2
     print(f"{'spec':<{width}}{'games':>6}{'win%':>7}{'diff':>8}{'±se':>7}{'s/game':>8}", flush=True)
     for spec in args.specs:
-        res = evaluate(spec, args.baseline, args.games, args.seed, cards, args.workers, args.games_out)
+        res = evaluate(spec, args.baseline, args.games, args.seed, cards, args.workers, args.games_out,
+                       args.token_order)
         print(
             f"{spec:<{width}}{res['games']:>6}{100 * res['win_rate']:>6.1f}%{res['mean_diff']:>+8.2f}"
             f"{res['stderr']:>7.2f}{res['sec_per_game']:>8.2f}",

@@ -411,3 +411,29 @@ def test_plan_stats_and_games_out(tmp_path):
         stats = r["bot_stats"][r["seats"].index(r["spec"])]
         assert stats["evaluations"] == 3  # turns 0, 7, 14
         assert stats["sim_decisions"] > 0 and "plan_log" in stats
+
+
+def test_token_order_presorted():
+    from collections import Counter
+
+    with pytest.raises(ValueError):
+        Game(GameConfig(num_players=2, seed=1, token_order="bogus"))
+    first = Counter()
+    for seed in range(400):
+        g = Game(GameConfig(num_players=2, seed=seed, token_order="presorted"))
+        assert total_tokens(g) == 100
+        first[g.display_tokens[0]] += 1
+    assert all(60 <= first[w] <= 100 for w in Wildlife)  # roughly uniform (expected 80 each)
+    bots = [make_bot("greedy", seed=0), make_bot("random", seed=1)]
+    a = play_game(bots, GameConfig(num_players=2, seed=5, token_order="presorted")).totals
+    bots = [make_bot("greedy", seed=0), make_bot("random", seed=1)]
+    b = play_game(bots, GameConfig(num_players=2, seed=5, token_order="presorted")).totals
+    assert a == b
+
+
+def test_plan_eval_log_sums_to_budget():
+    bot = make_bot("plan:replan=always,samples=1,check_every=6", seed=0)
+    play_game([bot, make_bot("greedy", seed=1)], GameConfig(num_players=2, seed=6))
+    stats = bot.stats()
+    assert [t for t, _ in stats["eval_log"]] == [0, 6, 12, 18]
+    assert sum(n for _, n in stats["eval_log"]) == stats["sim_decisions"]

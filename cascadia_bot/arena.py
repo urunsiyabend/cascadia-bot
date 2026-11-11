@@ -40,12 +40,14 @@ class GameJob:
     specs: list[str]  # bot spec per seat
     cards: str | None  # None = random per game
     habitat_majority: bool
+    token_order: str = "random"
 
 
 def _run_job(job: GameJob) -> dict:
     bots = [make_bot(spec, seed=job.seed * 10 + i) for i, spec in enumerate(job.specs)]
     cards = None if job.cards is None else ScoringCards.from_string(job.cards)
-    config = GameConfig(num_players=len(bots), cards=cards, habitat_majority=job.habitat_majority, seed=job.seed)
+    config = GameConfig(num_players=len(bots), cards=cards, habitat_majority=job.habitat_majority, seed=job.seed,
+                        token_order=job.token_order)
     result = play_game(bots, config)
     return {
         "seed": job.seed,
@@ -58,18 +60,19 @@ def _run_job(job: GameJob) -> dict:
     }
 
 
-def build_jobs(specs: list[str], games: int, seed: int, cards: str | None, majority: bool, solo: bool) -> list[GameJob]:
+def build_jobs(specs: list[str], games: int, seed: int, cards: str | None, majority: bool, solo: bool,
+               token_order: str = "random") -> list[GameJob]:
     jobs = []
     if solo:
         for g in range(games):
             for spec in specs:
-                jobs.append(GameJob(seed + g, [spec], cards, majority))
+                jobs.append(GameJob(seed + g, [spec], cards, majority, token_order))
         return jobs
     n = len(specs)
     for g in range(games):
         block, rot = divmod(g, n)
         seats = specs[rot:] + specs[:rot]  # rotate seats so everyone starts equally often
-        jobs.append(GameJob(seed + block, seats, cards, majority))
+        jobs.append(GameJob(seed + block, seats, cards, majority, token_order))
     return jobs
 
 
@@ -130,8 +133,8 @@ def format_summary(summary: dict, solo: bool) -> str:
 
 def run_tournament(specs: list[str], games: int = 100, seed: int = 0, cards: str | None = None,
                    habitat_majority: bool = True, solo: bool = False, workers: int = 1,
-                   progress: bool = False) -> tuple[dict, list[dict]]:
-    jobs = build_jobs(specs, games, seed, cards, habitat_majority, solo)
+                   progress: bool = False, token_order: str = "random") -> tuple[dict, list[dict]]:
+    jobs = build_jobs(specs, games, seed, cards, habitat_majority, solo, token_order)
     results: list[dict] = []
     t0 = time.time()
     if workers > 1:
